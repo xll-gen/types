@@ -216,6 +216,14 @@ LPXLOPER12 AnyToXLOPER12(const protocol::Any* any) {
                      return op;
                  }
 
+                 // Check for allocation overflow (size_t)
+                 if (count > SIZE_MAX / sizeof(XLOPER12)) {
+                     LPXLOPER12 op = NewXLOPER12();
+                     op->xltype = xltypeErr | xlbitDLLFree;
+                     op->val.err = xlerrValue;
+                     return op;
+                 }
+
                  LPXLOPER12 op = NewXLOPER12();
                  op->xltype = xltypeMulti | xlbitDLLFree;
                  op->val.array.rows = rows;
@@ -256,7 +264,12 @@ LPXLOPER12 AnyToXLOPER12(const protocol::Any* any) {
 }
 
 LPXLOPER12 RangeToXLOPER12(const protocol::Range* range) {
-    if (!range) return NULL;
+    if (!range) {
+        LPXLOPER12 op = NewXLOPER12();
+        op->xltype = xltypeErr | xlbitDLLFree;
+        op->val.err = xlerrValue;
+        return op;
+    }
 
     // Validate refs existence and count limits (XLOPER12 ref count is WORD/16-bit)
     if (!range->refs() || range->refs()->size() > 65535) {
@@ -301,7 +314,12 @@ LPXLOPER12 RangeToXLOPER12(const protocol::Range* range) {
 }
 
 LPXLOPER12 GridToXLOPER12(const protocol::Grid* grid) {
-    if (!grid) return NULL;
+    if (!grid) {
+        LPXLOPER12 op = NewXLOPER12();
+        op->xltype = xltypeErr | xlbitDLLFree;
+        op->val.err = xlerrValue;
+        return op;
+    }
 
     int rows = grid->rows();
     int cols = grid->cols();
@@ -396,21 +414,25 @@ LPXLOPER12 GridToXLOPER12(const protocol::Grid* grid) {
                         // CP_UTF8 = 65001
                         int needed = MultiByteToWideChar(65001, 0, utf8, utf8Len, NULL, 0);
 
-                        // Clamp to Excel 12 limit (32767 chars) to prevent huge allocations/overflows
-                        if (needed > 32767) needed = 32767;
-                        if (needed < 0) needed = 0;
-
-                        cell.val.str = new XCHAR[needed + 2];
-                        if (needed > 0) {
-                            if (MultiByteToWideChar(65001, 0, utf8, utf8Len, cell.val.str + 1, needed) == 0) {
-                                // Conversion failed (buffer too small or invalid input).
-                                // Fallback to empty string.
-                                needed = 0;
+                        // Safety check: Don't allocate huge memory for strings.
+                        // Excel only supports ~32k chars. We allow a bit more for intermediate buffer but cap it.
+                        // 10,000,000 is an arbitrary large limit (20MB) to prevent DoS/Overflow.
+                        if (needed < 0 || needed > 10000000 || (size_t)needed > SIZE_MAX / sizeof(XCHAR) - 2) {
+                            // Too large, treat as empty or error.
+                            // We'll treat as empty string to be safe and avoid throwing.
+                            cell.val.str = new XCHAR[2];
+                            cell.val.str[0] = 0;
+                            cell.val.str[1] = 0;
+                        } else {
+                            cell.val.str = new XCHAR[needed + 2];
+                            if (needed > 0) {
+                                MultiByteToWideChar(65001, 0, utf8, utf8Len, cell.val.str + 1, needed);
                             }
-                        }
 
-                        cell.val.str[0] = (XCHAR)needed;
-                        cell.val.str[needed + 1] = 0;
+                            if (needed > 32767) needed = 32767;
+                            cell.val.str[0] = (XCHAR)needed;
+                            cell.val.str[needed + 1] = 0;
+                        }
                     }
                     break;
                 }
@@ -432,7 +454,7 @@ LPXLOPER12 GridToXLOPER12(const protocol::Grid* grid) {
 }
 
 FP12* NumGridToFP12(const protocol::NumGrid* grid) {
-    if (!grid) return NULL;
+    if (!grid) return NewFP12(0, 0);
     int rows = grid->rows();
     int cols = grid->cols();
 

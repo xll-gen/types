@@ -83,3 +83,40 @@
 
 *   **My Judgment:**
     Wrapped `AnyToXLOPER12` and `GridToXLOPER12` main bodies in `try-catch (...)` blocks. They now return `xltypeErr` upon any C++ exception (including `bad_alloc`).
+
+## 5. Integer Overflow in `AnyToXLOPER12` (NumGrid)
+
+*   **Status:** Resolved
+*   **Severity:** High
+*   **Description:**
+    In `AnyToXLOPER12` (src/converters.cpp), the `NumGrid` case calculates `count = rows * cols` and then allocates `new XLOPER12[count]`.
+    While `count` is checked against `INT_MAX`, there was no check that `count * sizeof(XLOPER12)` does not overflow `size_t`.
+    On 32-bit systems (where `size_t` is 32-bit), `count` up to `2*10^9` is allowed, but `count * 32` would wrap around, causing a small allocation and subsequent heap overflow.
+
+*   **My Judgment:**
+    Added a check `if (count > SIZE_MAX / sizeof(XLOPER12))` to prevent this overflow.
+
+## 6. String Allocation Denial of Service
+
+*   **Status:** Resolved
+*   **Severity:** Medium
+*   **Description:**
+    In `GridToXLOPER12` (src/converters.cpp), strings are converted using `MultiByteToWideChar` with the full UTF-8 length.
+    If the input string is huge (e.g. 1GB), `needed` (wide char count) will be huge.
+    The code allocates `new XCHAR[needed + 2]`. This allows a potential attacker (or bad data) to exhaust memory (DoS) or potentially cause integer overflow in `needed + 2`.
+    Since Excel cells only support ~32k characters, allocating GBs of memory is wasteful and dangerous.
+
+*   **My Judgment:**
+    Added a strict limit check on `needed` (10 million characters or `SIZE_MAX` overflow) before allocation. If the string is too large, it is treated as an empty string (or truncated) to prevent DoS.
+
+## 7. Unsafe NULL Return Values
+
+*   **Status:** Resolved
+*   **Severity:** Medium
+*   **Description:**
+    `GridToXLOPER12`, `RangeToXLOPER12`, and `NumGridToFP12` return `NULL` (nullptr) when inputs are invalid (e.g. `!grid`).
+    Callers expecting a valid `XLOPER12` structure might crash if they don't check for NULL.
+    `AnyToXLOPER12` returns `GridToXLOPER12(...)` directly. If that returns NULL, `AnyToXLOPER12` returns NULL, potentially crashing consumers.
+
+*   **My Judgment:**
+    Modified `GridToXLOPER12` and `RangeToXLOPER12` to return a valid `XLOPER12` with `xltypeErr` (xlerrValue) instead of `NULL`. Modified `NumGridToFP12` to return a valid empty `FP12` (0x0) instead of `NULL`.

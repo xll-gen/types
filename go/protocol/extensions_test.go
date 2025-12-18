@@ -6,6 +6,7 @@ import (
 )
 
 func TestGrid_Validate(t *testing.T) {
+	t.Parallel()
 	b := flatbuffers.NewBuilder(0)
 
 	// Helper to create Scalar Int
