@@ -7,6 +7,7 @@
 #include <algorithm>
 #include <limits>
 #include <new>
+#include <cstring> // for std::memset
 
 // Excel -> FlatBuffers Converters
 
@@ -364,9 +365,6 @@ LPXLOPER12 GridToXLOPER12(const protocol::Grid* grid) {
     // RAII guard to clean up if exception happens or return early
     // Note: We need to use a custom cleanup because we might have partially allocated strings.
     // Standard xlAutoFree12 expects a fully valid structure or at least valid pointers.
-    // Since we zero-init via default constructor of XLOPER12 (implicit in new[]?),
-    // wait, new XLOPER12[count] calls default ctor? XLOPER12 is a C struct.
-    // C++ rule: new T[N] default initializes. For POD struct, it might not zero init.
     // We MUST zero init the array to be safe for partial cleanup.
     std::memset(op->val.array.lparray, 0, count * sizeof(XLOPER12));
 
