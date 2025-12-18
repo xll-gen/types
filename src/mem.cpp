@@ -1,6 +1,7 @@
 #include "types/mem.h"
 #include "types/ObjectPool.h"
 #include "types/PascalString.h"
+#include "types/ScopeGuard.h"
 #include <mutex>
 #include <vector>
 #include <cstring> // For memset, memcpy
@@ -26,11 +27,16 @@ LPXLOPER12 NewExcelString(const std::wstring& str) {
 
     std::vector<wchar_t> pascalStr = WStringToPascalString(str);
 
+    ScopeGuard guard([&]() {
+        ReleaseXLOPER12(p);
+    });
+
     // Allocate buffer for the string.
     wchar_t* buffer = new wchar_t[pascalStr.size()];
     std::memcpy(buffer, pascalStr.data(), pascalStr.size() * sizeof(wchar_t));
 
     p->val.str = buffer;
+    guard.Dismiss();
     return p;
 }
 

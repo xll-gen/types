@@ -19,8 +19,8 @@ func (rcv *Grid) Validate() error {
 		return fmt.Errorf("negative dimensions: %d x %d", rows, cols)
 	}
 
-	expectedCount := rows * cols
-	if rcv.DataLength() != expectedCount {
+	expectedCount := uint64(rcv.Rows()) * uint64(rcv.Cols())
+	if uint64(rcv.DataLength()) != expectedCount {
 		return fmt.Errorf("%w: expected %d, got %d", ErrInvalidDimensions, expectedCount, rcv.DataLength())
 	}
 	return nil
@@ -35,8 +35,8 @@ func (rcv *NumGrid) Validate() error {
 		return fmt.Errorf("negative dimensions: %d x %d", rows, cols)
 	}
 
-	expectedCount := rows * cols
-	if rcv.DataLength() != expectedCount {
+	expectedCount := uint64(rcv.Rows()) * uint64(rcv.Cols())
+	if uint64(rcv.DataLength()) != expectedCount {
 		return fmt.Errorf("%w: expected %d, got %d", ErrInvalidDimensions, expectedCount, rcv.DataLength())
 	}
 	return nil

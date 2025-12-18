@@ -373,12 +373,14 @@ LPXLOPER12 GridToXLOPER12(const protocol::Grid* grid) {
         // because that function assumes it's freeing the whole OP struct usually.
         // Actually, we can reuse the logic:
         // iterate and free strings, then delete array, then release OP.
-        for(size_t i=0; i<count; ++i) {
-             if (op->val.array.lparray[i].xltype == xltypeStr && op->val.array.lparray[i].val.str) {
-                 delete[] op->val.array.lparray[i].val.str;
-             }
+        if (op->val.array.lparray) {
+            for(size_t i=0; i<count; ++i) {
+                 if (op->val.array.lparray[i].xltype == xltypeStr && op->val.array.lparray[i].val.str) {
+                     delete[] op->val.array.lparray[i].val.str;
+                 }
+            }
+            delete[] op->val.array.lparray;
         }
-        delete[] op->val.array.lparray;
         ReleaseXLOPER12(op);
     });
 
