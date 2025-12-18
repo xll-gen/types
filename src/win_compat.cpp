@@ -24,15 +24,18 @@ int MultiByteToWideChar(unsigned int CodePage, unsigned long dwFlags, const char
             return resLen;
         }
 
-        int count = std::min(resLen, cchWideChar);
-        if (cbMultiByte == -1 && count > 0 && count == resLen) {
-            // Include null
-            std::memcpy(lpWideCharStr, wstr.data(), (count - 1) * sizeof(wchar_t));
-            lpWideCharStr[count - 1] = 0;
-        } else if (count > 0) {
-             std::memcpy(lpWideCharStr, wstr.data(), count * sizeof(wchar_t));
+        if (resLen > cchWideChar) {
+            return 0;
         }
-        return count;
+
+        if (cbMultiByte == -1) {
+            // Include null
+            std::memcpy(lpWideCharStr, wstr.data(), (resLen - 1) * sizeof(wchar_t));
+            lpWideCharStr[resLen - 1] = 0;
+        } else {
+             std::memcpy(lpWideCharStr, wstr.data(), resLen * sizeof(wchar_t));
+        }
+        return resLen;
     } catch (...) {
         return 0;
     }
@@ -54,14 +57,17 @@ int WideCharToMultiByte(unsigned int CodePage, unsigned long dwFlags, const wcha
             return resLen;
         }
 
-        int count = std::min(resLen, cbMultiByte);
-        if (cchWideChar == -1 && count > 0 && count == resLen) {
-            std::memcpy(lpMultiByteStr, str.data(), count - 1);
-            lpMultiByteStr[count - 1] = 0;
-        } else if (count > 0) {
-            std::memcpy(lpMultiByteStr, str.data(), count);
+        if (resLen > cbMultiByte) {
+            return 0;
         }
-        return count;
+
+        if (cchWideChar == -1) {
+            std::memcpy(lpMultiByteStr, str.data(), resLen - 1);
+            lpMultiByteStr[resLen - 1] = 0;
+        } else {
+            std::memcpy(lpMultiByteStr, str.data(), resLen);
+        }
+        return resLen;
     } catch (...) {
         return 0;
     }
