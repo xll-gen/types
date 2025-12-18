@@ -42,3 +42,4 @@ target_link_libraries(your_target PRIVATE xll-gen-types)
 *   **Dependencies**: This library should remain independent of the IPC mechanism (`shm`) and the main `xll-gen` CLI logic.
 *   **Formatting**: Follow standard Go and C++ formatting guidelines.
 *   **Testing**: Ensure changes are verified. Since this is a library, unit tests (if added) should cover type conversions.
+*   **Workflow**: Before committing, fetch the latest state of the parent branch and merge it into your working branch.
