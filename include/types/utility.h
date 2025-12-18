@@ -29,3 +29,8 @@ bool IsSingleCell(LPXLOPER12 pxRef);
 
 // Path Helper
 std::wstring GetXllDir();
+
+// Debug Logging
+void SetDebugFlag(bool enabled);
+bool GetDebugFlag();
+void DebugLog(const char* fmt, ...);

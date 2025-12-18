@@ -1,5 +1,7 @@
 #include "types/utility.h"
 
+#include <cstdarg>
+#include <cstdio>
 #include <vector>
 
 #include "types/mem.h"
@@ -92,4 +94,26 @@ std::wstring GetXllDir() {
         return p.substr(0, pos);
     }
     return L".";
+}
+
+// Debug Logging
+static bool g_debug_enabled = false;
+
+void SetDebugFlag(bool enabled) { g_debug_enabled = enabled; }
+
+bool GetDebugFlag() { return g_debug_enabled; }
+
+void DebugLog(const char* fmt, ...) {
+    if (!g_debug_enabled) return;
+
+    va_list args;
+    va_start(args, fmt);
+#ifdef _WIN32
+    char buffer[2048];
+    vsnprintf(buffer, sizeof(buffer), fmt, args);
+    OutputDebugStringA(buffer);
+#else
+    vfprintf(stderr, fmt, args);
+#endif
+    va_end(args);
 }
