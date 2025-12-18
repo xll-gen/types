@@ -36,6 +36,25 @@ FetchContent_MakeAvailable(xll-gen-types)
 target_link_libraries(your_target PRIVATE xll-gen-types)
 ```
 
+## Development
+
+This project uses [Task](https://taskfile.dev/) for build automation.
+
+### Prerequisites
+
+1.  **Task**: Download the `task` binary and place it in the root directory (or install it globally).
+    *   Do NOT commit the `task` binary.
+2.  **FlatBuffers Compiler (`flatc`)**: Download `flatc` and place it in the root directory (or ensure it is in your PATH).
+    *   Do NOT commit the `flatc` binary.
+
+### Commands
+
+*   **Build**: `./task build`
+*   **Test**: `./task test`
+*   **Clean**: `./task clean`
+*   **Format**: `./task fmt`
+*   **All**: `./task` (runs configure, build, and test)
+
 ## Agent Guidelines
 
 *   **Modification**: When modifying `protocol.fbs`, you must regenerate the Go code and the C++ header (`protocol_generated.h`).
