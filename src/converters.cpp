@@ -293,10 +293,26 @@ LPXLOPER12 GridToXLOPER12(const protocol::Grid* grid) {
                 break;
             case protocol::ScalarValue::Str: {
                 cell.xltype = xltypeStr;
-                std::wstring ws = StringToWString(scalar->val_as_Str()->val()->str());
-                auto vec = WStringToPascalString(ws);
-                cell.val.str = new XCHAR[vec.size()];
-                std::copy(vec.begin(), vec.end(), cell.val.str);
+                const auto* fbStr = scalar->val_as_Str()->val();
+                if (!fbStr) {
+                    cell.val.str = new XCHAR[2];
+                    cell.val.str[0] = 0;
+                    cell.val.str[1] = 0;
+                } else {
+                    const char* utf8 = fbStr->c_str();
+                    int utf8Len = fbStr->size();
+                    // CP_UTF8 = 65001
+                    int needed = MultiByteToWideChar(65001, 0, utf8, utf8Len, NULL, 0);
+
+                    cell.val.str = new XCHAR[needed + 2];
+                    if (needed > 0) {
+                        MultiByteToWideChar(65001, 0, utf8, utf8Len, cell.val.str + 1, needed);
+                    }
+
+                    if (needed > 32767) needed = 32767;
+                    cell.val.str[0] = (XCHAR)needed;
+                    cell.val.str[needed + 1] = 0;
+                }
                 break;
             }
             case protocol::ScalarValue::Err:
