@@ -1,1 +1,7 @@
 build/
+.cache/
+.vscode/
+*.o
+*.a
+*.exe
+*.test
