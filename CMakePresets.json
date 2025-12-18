@@ -10,22 +10,17 @@
       "displayName": "Default Config",
       "description": "Default build using Unix Makefiles",
       "generator": "Unix Makefiles",
-      "binaryDir": "${sourceDir}/build"
+      "binaryDir": "${sourceDir}/build/unix"
     },
     {
-      "name": "release",
-      "inherits": "default",
-      "displayName": "Release Config",
+      "name": "windows-mingw",
+      "displayName": "Windows MinGW Config",
+      "description": "Build using MinGW Makefiles",
+      "generator": "MinGW Makefiles",
+      "binaryDir": "${sourceDir}/build/mingw",
       "cacheVariables": {
-        "CMAKE_BUILD_TYPE": "Release"
-      }
-    },
-    {
-      "name": "debug",
-      "inherits": "default",
-      "displayName": "Debug Config",
-      "cacheVariables": {
-        "CMAKE_BUILD_TYPE": "Debug"
+        "CMAKE_C_COMPILER": "gcc",
+        "CMAKE_CXX_COMPILER": "g++"
       }
     }
   ],
@@ -35,18 +30,25 @@
       "configurePreset": "default"
     },
     {
-      "name": "release",
-      "configurePreset": "release"
-    },
-    {
-      "name": "debug",
-      "configurePreset": "debug"
+      "name": "windows-mingw",
+      "configurePreset": "windows-mingw"
     }
   ],
   "testPresets": [
     {
       "name": "default",
       "configurePreset": "default",
+      "output": {
+        "outputOnFailure": true
+      },
+      "execution": {
+        "noTestsAction": "error",
+        "stopOnFailure": false
+      }
+    },
+    {
+      "name": "windows-mingw",
+      "configurePreset": "windows-mingw",
       "output": {
         "outputOnFailure": true
       },

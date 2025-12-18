@@ -1,5 +1,8 @@
 version: '3'
 
+vars:
+  PRESET: '{{.PRESET | default "default"}}'
+
 tasks:
   default:
     desc: Build the project
@@ -9,23 +12,23 @@ tasks:
   build:
     desc: Configure and build the project
     cmds:
-      - cmake --preset default
-      - cmake --build --preset default
+      - cmake --preset {{.PRESET}}
+      - cmake --build --preset {{.PRESET}}
 
   test:
     desc: Run tests
     cmds:
-      - ctest --preset default
+      - ctest --preset {{.PRESET}}
 
   format:
     desc: Format C++ and Go code
     cmds:
-      - cmake --build --preset default --target format
+      - cmake --build --preset {{.PRESET}} --target format
 
   generate:
     desc: Regenerate FlatBuffers code
     cmds:
-      - cmake --build --preset default --target generate
+      - cmake --build --preset {{.PRESET}} --target generate
 
   clean:
     desc: Clean build directory
