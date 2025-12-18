@@ -2,9 +2,11 @@
 #include "types/mem.h"
 #include "types/utility.h"
 #include "types/PascalString.h"
+#include "types/ScopeGuard.h"
 #include <vector>
 #include <algorithm>
 #include <limits>
+#include <new>
 
 // Excel -> FlatBuffers Converters
 
@@ -160,80 +162,95 @@ flatbuffers::Offset<protocol::Any> ConvertAny(LPXLOPER12 op, flatbuffers::FlatBu
 // FlatBuffers -> Excel Converters
 
 LPXLOPER12 AnyToXLOPER12(const protocol::Any* any) {
-    if (!any) {
-        LPXLOPER12 op = NewXLOPER12();
-        op->xltype = xltypeNil | xlbitDLLFree;
-        return op;
-    }
+    try {
+        if (!any) {
+            LPXLOPER12 op = NewXLOPER12();
+            op->xltype = xltypeNil | xlbitDLLFree;
+            return op;
+        }
 
-    switch (any->val_type()) {
-        case protocol::AnyValue::Num: {
-            LPXLOPER12 op = NewXLOPER12();
-            op->xltype = xltypeNum | xlbitDLLFree;
-            op->val.num = any->val_as_Num()->val();
-            return op;
-        }
-        case protocol::AnyValue::Int: {
-            LPXLOPER12 op = NewXLOPER12();
-            op->xltype = xltypeInt | xlbitDLLFree;
-            op->val.w = any->val_as_Int()->val();
-            return op;
-        }
-        case protocol::AnyValue::Bool: {
-            LPXLOPER12 op = NewXLOPER12();
-            op->xltype = xltypeBool | xlbitDLLFree;
-            op->val.xbool = any->val_as_Bool()->val();
-            return op;
-        }
-        case protocol::AnyValue::Str: {
-            std::wstring ws = StringToWString(any->val_as_Str()->val()->str());
-            return NewExcelString(ws);
-        }
-        case protocol::AnyValue::Err: {
-             LPXLOPER12 op = NewXLOPER12();
-             op->xltype = xltypeErr | xlbitDLLFree;
-             op->val.err = (int)any->val_as_Err()->val();
-             return op;
-        }
-        case protocol::AnyValue::Grid: {
-             return GridToXLOPER12(any->val_as_Grid());
-        }
-        case protocol::AnyValue::NumGrid: {
-             const protocol::NumGrid* ng = any->val_as_NumGrid();
-             int rows = ng->rows();
-             int cols = ng->cols();
-             size_t count = (size_t)rows * cols;
-
-             if (rows < 0 || cols < 0 || count > (size_t)std::numeric_limits<int>::max() ||
-                 !ng->data() || ng->data()->size() < count) {
+        switch (any->val_type()) {
+            case protocol::AnyValue::Num: {
+                LPXLOPER12 op = NewXLOPER12();
+                op->xltype = xltypeNum | xlbitDLLFree;
+                op->val.num = any->val_as_Num()->val();
+                return op;
+            }
+            case protocol::AnyValue::Int: {
+                LPXLOPER12 op = NewXLOPER12();
+                op->xltype = xltypeInt | xlbitDLLFree;
+                op->val.w = any->val_as_Int()->val();
+                return op;
+            }
+            case protocol::AnyValue::Bool: {
+                LPXLOPER12 op = NewXLOPER12();
+                op->xltype = xltypeBool | xlbitDLLFree;
+                op->val.xbool = any->val_as_Bool()->val();
+                return op;
+            }
+            case protocol::AnyValue::Str: {
+                std::wstring ws = StringToWString(any->val_as_Str()->val()->str());
+                return NewExcelString(ws);
+            }
+            case protocol::AnyValue::Err: {
                  LPXLOPER12 op = NewXLOPER12();
                  op->xltype = xltypeErr | xlbitDLLFree;
-                 op->val.err = xlerrValue;
+                 op->val.err = (int)any->val_as_Err()->val();
                  return op;
-             }
+            }
+            case protocol::AnyValue::Grid: {
+                 return GridToXLOPER12(any->val_as_Grid());
+            }
+            case protocol::AnyValue::NumGrid: {
+                 const protocol::NumGrid* ng = any->val_as_NumGrid();
+                 int rows = ng->rows();
+                 int cols = ng->cols();
+                 size_t count = (size_t)rows * cols;
 
-             LPXLOPER12 op = NewXLOPER12();
-             op->xltype = xltypeMulti | xlbitDLLFree;
-             op->val.array.rows = rows;
-             op->val.array.columns = cols;
-             op->val.array.lparray = new XLOPER12[count];
+                 if (rows < 0 || cols < 0 || count > (size_t)std::numeric_limits<int>::max() ||
+                     !ng->data() || ng->data()->size() < count) {
+                     LPXLOPER12 op = NewXLOPER12();
+                     op->xltype = xltypeErr | xlbitDLLFree;
+                     op->val.err = xlerrValue;
+                     return op;
+                 }
 
-             auto data = ng->data();
-             for(size_t i=0; i<count; ++i) {
-                 op->val.array.lparray[i].xltype = xltypeNum;
-                 op->val.array.lparray[i].val.num = data->Get((flatbuffers::uoffset_t)i);
-             }
-             return op;
+                 LPXLOPER12 op = NewXLOPER12();
+                 op->xltype = xltypeMulti | xlbitDLLFree;
+                 op->val.array.rows = rows;
+                 op->val.array.columns = cols;
+                 op->val.array.lparray = new XLOPER12[count];
+
+                 // Ensure we clean up if something goes wrong during population (unlikely for NumGrid but good practice)
+                 ScopeGuard guard([&]() {
+                     delete[] op->val.array.lparray;
+                     ReleaseXLOPER12(op);
+                 });
+
+                 auto data = ng->data();
+                 for(size_t i=0; i<count; ++i) {
+                     op->val.array.lparray[i].xltype = xltypeNum;
+                     op->val.array.lparray[i].val.num = data->Get((flatbuffers::uoffset_t)i);
+                 }
+
+                 guard.Dismiss();
+                 return op;
+            }
+            case protocol::AnyValue::Range: {
+                return RangeToXLOPER12(any->val_as_Range());
+            }
+            case protocol::AnyValue::Nil:
+            default: {
+                 LPXLOPER12 op = NewXLOPER12();
+                 op->xltype = xltypeNil | xlbitDLLFree;
+                 return op;
+            }
         }
-        case protocol::AnyValue::Range: {
-            return RangeToXLOPER12(any->val_as_Range());
-        }
-        case protocol::AnyValue::Nil:
-        default: {
-             LPXLOPER12 op = NewXLOPER12();
-             op->xltype = xltypeNil | xlbitDLLFree;
-             return op;
-        }
+    } catch (...) {
+        LPXLOPER12 op = NewXLOPER12();
+        op->xltype = xltypeErr | xlbitDLLFree;
+        op->val.err = xlerrValue;
+        return op;
     }
 }
 
@@ -253,6 +270,12 @@ LPXLOPER12 RangeToXLOPER12(const protocol::Range* range) {
 
     // Safe allocation size calculation
     size_t refs_count = range->refs()->size();
+
+    // Guard against leaks if new throws
+    ScopeGuard guard([&]() {
+        ReleaseXLOPER12(op);
+    });
+
     // XLMREF12 struct has 1 ref. We need space for (refs_count) refs in total.
     // Base size is sizeof(XLMREF12).
     // If refs_count > 1, we need (refs_count - 1) * sizeof(XLREF12) more.
@@ -272,6 +295,7 @@ LPXLOPER12 RangeToXLOPER12(const protocol::Range* range) {
         op->val.mref.lpmref->reftbl[i].colLast = r->col_last();
     }
 
+    guard.Dismiss();
     return op;
 }
 
@@ -319,57 +343,86 @@ LPXLOPER12 GridToXLOPER12(const protocol::Grid* grid) {
     op->val.array.columns = cols;
     op->val.array.lparray = new XLOPER12[count];
 
-    for (size_t i = 0; i < count; ++i) {
-        auto scalar = grid->data()->Get((flatbuffers::uoffset_t)i);
-        auto& cell = op->val.array.lparray[i];
-        cell.xltype = xltypeNil; // Default
+    // RAII guard to clean up if exception happens or return early
+    // Note: We need to use a custom cleanup because we might have partially allocated strings.
+    // Standard xlAutoFree12 expects a fully valid structure or at least valid pointers.
+    // Since we zero-init via default constructor of XLOPER12 (implicit in new[]?),
+    // wait, new XLOPER12[count] calls default ctor? XLOPER12 is a C struct.
+    // C++ rule: new T[N] default initializes. For POD struct, it might not zero init.
+    // We MUST zero init the array to be safe for partial cleanup.
+    std::memset(op->val.array.lparray, 0, count * sizeof(XLOPER12));
 
-        switch(scalar->val_type()) {
-            case protocol::ScalarValue::Num:
-                cell.xltype = xltypeNum;
-                cell.val.num = scalar->val_as_Num()->val();
-                break;
-            case protocol::ScalarValue::Int:
-                cell.xltype = xltypeInt;
-                cell.val.w = scalar->val_as_Int()->val();
-                break;
-            case protocol::ScalarValue::Bool:
-                cell.xltype = xltypeBool;
-                cell.val.xbool = scalar->val_as_Bool()->val();
-                break;
-            case protocol::ScalarValue::Str: {
-                cell.xltype = xltypeStr;
-                const auto* fbStr = scalar->val_as_Str()->val();
-                if (!fbStr) {
-                    cell.val.str = new XCHAR[2];
-                    cell.val.str[0] = 0;
-                    cell.val.str[1] = 0;
-                } else {
-                    const char* utf8 = fbStr->c_str();
-                    int utf8Len = fbStr->size();
-                    // CP_UTF8 = 65001
-                    int needed = MultiByteToWideChar(65001, 0, utf8, utf8Len, NULL, 0);
-
-                    cell.val.str = new XCHAR[needed + 2];
-                    if (needed > 0) {
-                        MultiByteToWideChar(65001, 0, utf8, utf8Len, cell.val.str + 1, needed);
-                    }
-
-                    if (needed > 32767) needed = 32767;
-                    cell.val.str[0] = (XCHAR)needed;
-                    cell.val.str[needed + 1] = 0;
-                }
-                break;
-            }
-            case protocol::ScalarValue::Err:
-                cell.xltype = xltypeErr;
-                cell.val.err = (int)scalar->val_as_Err()->val();
-                break;
-            default:
-                break;
+    ScopeGuard guard([&]() {
+        // Use the existing logic in xlAutoFree12-like manner but we don't call xlAutoFree12
+        // because that function assumes it's freeing the whole OP struct usually.
+        // Actually, we can reuse the logic:
+        // iterate and free strings, then delete array, then release OP.
+        for(size_t i=0; i<count; ++i) {
+             if (op->val.array.lparray[i].xltype == xltypeStr && op->val.array.lparray[i].val.str) {
+                 delete[] op->val.array.lparray[i].val.str;
+             }
         }
+        delete[] op->val.array.lparray;
+        ReleaseXLOPER12(op);
+    });
+
+    try {
+        for (size_t i = 0; i < count; ++i) {
+            auto scalar = grid->data()->Get((flatbuffers::uoffset_t)i);
+            auto& cell = op->val.array.lparray[i];
+            cell.xltype = xltypeNil; // Default
+
+            switch(scalar->val_type()) {
+                case protocol::ScalarValue::Num:
+                    cell.xltype = xltypeNum;
+                    cell.val.num = scalar->val_as_Num()->val();
+                    break;
+                case protocol::ScalarValue::Int:
+                    cell.xltype = xltypeInt;
+                    cell.val.w = scalar->val_as_Int()->val();
+                    break;
+                case protocol::ScalarValue::Bool:
+                    cell.xltype = xltypeBool;
+                    cell.val.xbool = scalar->val_as_Bool()->val();
+                    break;
+                case protocol::ScalarValue::Str: {
+                    cell.xltype = xltypeStr;
+                    const auto* fbStr = scalar->val_as_Str()->val();
+                    if (!fbStr) {
+                        cell.val.str = new XCHAR[2];
+                        cell.val.str[0] = 0;
+                        cell.val.str[1] = 0;
+                    } else {
+                        const char* utf8 = fbStr->c_str();
+                        int utf8Len = fbStr->size();
+                        // CP_UTF8 = 65001
+                        int needed = MultiByteToWideChar(65001, 0, utf8, utf8Len, NULL, 0);
+
+                        cell.val.str = new XCHAR[needed + 2];
+                        if (needed > 0) {
+                            MultiByteToWideChar(65001, 0, utf8, utf8Len, cell.val.str + 1, needed);
+                        }
+
+                        if (needed > 32767) needed = 32767;
+                        cell.val.str[0] = (XCHAR)needed;
+                        cell.val.str[needed + 1] = 0;
+                    }
+                    break;
+                }
+                case protocol::ScalarValue::Err:
+                    cell.xltype = xltypeErr;
+                    cell.val.err = (int)scalar->val_as_Err()->val();
+                    break;
+                default:
+                    break;
+            }
+        }
+    } catch (...) {
+        // Guard will clean up
+        throw;
     }
 
+    guard.Dismiss();
     return op;
 }
 
