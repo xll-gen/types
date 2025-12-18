@@ -19,7 +19,7 @@ This repository contains the core types and conversion logic for the `xll-gen` p
 
 ## Go Protocol Types
 
-The `go/protocol` directory contains the generated Go code from the `protocol.fbs` FlatBuffers schema. This package is used to serialize and deserialize messages exchanged between the Excel add-in and the backend service.
+The `go/protocol` directory contains the generated Go code from the `protocol.fbs` FlatBuffers schema (located at `go/protocol/protocol.fbs`). This package is used to serialize and deserialize messages exchanged between the Excel add-in and the backend service.
 
 ### Usage
 
@@ -51,6 +51,12 @@ target_link_libraries(your_target PRIVATE xll-gen-types)
 
 **Dependencies**:
 - **FlatBuffers**: This project depends on Google FlatBuffers. The CMake configuration handles this dependency.
+
+### Cross-Platform Support
+
+To facilitate unit testing and development on non-Windows platforms (e.g., Linux, macOS), this library includes a compatibility layer (`include/types/win_compat.h`). This layer mocks necessary Windows data types (like `DWORD`, `HANDLE`) and Excel structures (`XLOPER12`) so that the library can be compiled and tested without the Windows SDK or Excel installed.
+
+The compatibility layer is automatically included when compiling on non-Windows systems.
 
 ### API Reference
 
@@ -136,6 +142,12 @@ Header: `include/types/utility.h`
     *   Checks if a reference `XLOPER12` points to a single cell.
 *   `std::wstring GetXllDir()`
     *   Returns the directory where the XLL is located.
+*   `void SetDebugFlag(bool enabled)`
+    *   Enables or disables debug logging.
+*   `bool GetDebugFlag()`
+    *   Returns the current debug logging state.
+*   `void DebugLog(const char* fmt, ...)`
+    *   Logs a formatted message to the debug output (Visual Studio Output window on Windows, stderr on other platforms) if the debug flag is enabled.
 
 #### Object Pool
 
