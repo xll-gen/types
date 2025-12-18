@@ -74,12 +74,12 @@ extern "C" void __stdcall xlAutoFree12(LPXLOPER12 p) {
     }
     else if (p->xltype & xltypeMulti) {
          if (p->val.array.lparray) {
-             int count = p->val.array.rows * p->val.array.columns;
+             size_t count = (size_t)p->val.array.rows * p->val.array.columns;
              // We need to check if elements have allocated memory
              // Note: This assumes we constructed the array.
              // If we construct arrays, we should probably set xlbitDLLFree on string elements?
              // But usually for xltypeMulti, we just clean up what we own.
-             for(int i=0; i<count; ++i) {
+             for(size_t i=0; i<count; ++i) {
                  LPXLOPER12 elem = &p->val.array.lparray[i];
                  if ((elem->xltype & xltypeStr) && elem->val.str) {
                       // Only delete if we assume we own it.
