@@ -158,3 +158,49 @@
 
 *   **My Judgment:**
     Modified `go/protocol/extensions.go` to cast dimensions to `uint64` before multiplication (`uint64(rows) * uint64(cols)`) and compared against `uint64(DataLength)`. This ensures robust validation even for maximal grid dimensions.
+
+## 11. Denial of Service in String Conversion
+
+*   **Status:** Resolved
+*   **Severity:** High
+*   **Description:**
+    In `src/utility.cpp`, the function `StringToWString` converts a `std::string` (UTF-8) to `std::wstring` using `MultiByteToWideChar`. It queries the required size and then constructs a `std::wstring` of that size.
+    There is no limit on the input string size. If a malicious or malformed FlatBuffer provides a huge string (e.g., 1GB), this function attempts to allocate a huge amount of memory, potentially causing a Denial of Service (DoS) by exhausting system memory or throwing `std::bad_alloc` (which might be caught, but the resource usage is the issue).
+    This is called from `AnyToXLOPER12` (Str case). unlike `GridToXLOPER12`, there is no 10M char limit here.
+
+*   **My Judgment:**
+    We should enforce a reasonable limit (e.g., 10 million characters) similar to `GridToXLOPER12` and return an empty string or error if exceeded.
+
+## 12. Integer Overflow in String Conversion
+
+*   **Status:** Resolved
+*   **Severity:** Medium
+*   **Description:**
+    In `src/utility.cpp`, `StringToWString` casts `str.size()` to `int` when calling `MultiByteToWideChar`.
+    `MultiByteToWideChar(..., (int)str.size(), ...)`
+    If `str.size()` exceeds `INT_MAX` (2GB), the cast results in a negative number.
+    While `MultiByteToWideChar` treats -1 as "null terminated", other negative values might be invalid or lead to unexpected behavior.
+    Combined with the lack of size limit (Bug 11), this poses a robustness issue.
+
+*   **My Judgment:**
+    We should cap the size to `INT_MAX` (or a lower safe limit like 10M) before casting.
+
+## 13. String Truncation Logic Failure
+
+*   **Status:** Resolved
+*   **Severity:** High
+*   **Description:**
+    In `src/converters.cpp`, `GridToXLOPER12` attempts to truncate strings longer than 32767 characters.
+    It sets `needed = 32767` if the required length is larger.
+    Then it allocates a buffer of size `needed + 2` and calls `MultiByteToWideChar` with `cchWideChar = needed`.
+    However, if the *source* string actually requires more than 32767 characters, `MultiByteToWideChar` fails (returns 0) because the destination buffer is too small.
+    The code does not check the return value. It proceeds to set the length prefix to 32767.
+    Since the buffer was allocated with `new XCHAR[...]` (without initialization), it contains garbage.
+    Excel receives a string claiming to be length 32767 but containing uninitialized memory.
+
+*   **My Judgment:**
+    We should detect if the required size exceeds 32767. If so, we must either:
+    1. Allocate the *full* required size to perform the conversion, then truncate the length prefix (wasteful but safe).
+    2. Attempt to truncate the source UTF-8 string (complex).
+    3. Treat over-long strings as errors or empty.
+    Given `XLOPER12` limitations, option 1 is safest for correctness if we must return partial data, or option 3 for safety. The current implementation attempts Option 1's result but fails to allocate enough memory for the intermediate step.

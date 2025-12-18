@@ -426,14 +426,27 @@ LPXLOPER12 GridToXLOPER12(const protocol::Grid* grid) {
                             cell.val.str[0] = 0;
                             cell.val.str[1] = 0;
                         } else {
-                            cell.val.str = new XCHAR[needed + 2];
-                            if (needed > 0) {
-                                MultiByteToWideChar(65001, 0, utf8, utf8Len, cell.val.str + 1, needed);
-                            }
+                            if (needed > 32767) {
+                                // Alloc full size first to ensure MultiByteToWideChar succeeds
+                                XCHAR* temp = new XCHAR[needed + 2];
+                                MultiByteToWideChar(65001, 0, utf8, utf8Len, temp + 1, needed);
 
-                            if (needed > 32767) needed = 32767;
-                            cell.val.str[0] = (XCHAR)needed;
-                            cell.val.str[needed + 1] = 0;
+                                // Copy truncated content to final buffer
+                                cell.val.str = new XCHAR[32767 + 2];
+                                std::memcpy(cell.val.str + 1, temp + 1, 32767 * sizeof(XCHAR));
+
+                                delete[] temp;
+
+                                cell.val.str[0] = 32767;
+                                cell.val.str[32767 + 1] = 0;
+                            } else {
+                                cell.val.str = new XCHAR[needed + 2];
+                                if (needed > 0) {
+                                    MultiByteToWideChar(65001, 0, utf8, utf8Len, cell.val.str + 1, needed);
+                                }
+                                cell.val.str[0] = (XCHAR)needed;
+                                cell.val.str[needed + 1] = 0;
+                            }
                         }
                     }
                     break;
