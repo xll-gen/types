@@ -18,7 +18,7 @@ flatbuffers::Offset<protocol::Scalar> ConvertScalar(const XLOPER12& cell, flatbu
     } else if (cell.xltype == xltypeStr) {
          return protocol::CreateScalar(builder, protocol::ScalarValue::Str, protocol::CreateStr(builder, builder.CreateString(ConvertExcelString(cell.val.str))).Union());
     } else if (cell.xltype == xltypeErr) {
-         return protocol::CreateScalar(builder, protocol::ScalarValue::Err, protocol::CreateErr(builder, (protocol::XlError)(cell.val.err + 2000)).Union());
+         return protocol::CreateScalar(builder, protocol::ScalarValue::Err, protocol::CreateErr(builder, (protocol::XlError)cell.val.err).Union());
     } else {
          return protocol::CreateScalar(builder, protocol::ScalarValue::Nil, protocol::CreateNil(builder).Union());
     }
@@ -144,7 +144,7 @@ flatbuffers::Offset<protocol::Any> ConvertAny(LPXLOPER12 op, flatbuffers::FlatBu
     } else if (op->xltype == xltypeStr) {
         return protocol::CreateAny(builder, protocol::AnyValue::Str, protocol::CreateStr(builder, builder.CreateString(ConvertExcelString(op->val.str))).Union());
     } else if (op->xltype == xltypeErr) {
-        return protocol::CreateAny(builder, protocol::AnyValue::Err, protocol::CreateErr(builder, (protocol::XlError)(op->val.err + 2000)).Union());
+        return protocol::CreateAny(builder, protocol::AnyValue::Err, protocol::CreateErr(builder, (protocol::XlError)op->val.err).Union());
     } else if (op->xltype & (xltypeRef | xltypeSRef)) {
         return protocol::CreateAny(builder, protocol::AnyValue::Range, ConvertRange(op, builder).Union());
 
@@ -192,7 +192,7 @@ LPXLOPER12 AnyToXLOPER12(const protocol::Any* any) {
         case protocol::AnyValue::Err: {
              LPXLOPER12 op = NewXLOPER12();
              op->xltype = xltypeErr | xlbitDLLFree;
-             op->val.err = (int)any->val_as_Err()->val() - 2000;
+             op->val.err = (int)any->val_as_Err()->val();
              return op;
         }
         case protocol::AnyValue::Grid: {
@@ -208,7 +208,7 @@ LPXLOPER12 AnyToXLOPER12(const protocol::Any* any) {
                  !ng->data() || ng->data()->size() < count) {
                  LPXLOPER12 op = NewXLOPER12();
                  op->xltype = xltypeErr | xlbitDLLFree;
-                 op->val.err = xlerrValue;
+                 op->val.err = (int)protocol::XlError::Value;
                  return op;
              }
 
@@ -244,7 +244,7 @@ LPXLOPER12 RangeToXLOPER12(const protocol::Range* range) {
     if (!range->refs() || range->refs()->size() > 65535) {
         LPXLOPER12 op = NewXLOPER12();
         op->xltype = xltypeErr | xlbitDLLFree;
-        op->val.err = xlerrValue;
+        op->val.err = (int)protocol::XlError::Value;
         return op;
     }
 
@@ -284,14 +284,14 @@ LPXLOPER12 GridToXLOPER12(const protocol::Grid* grid) {
     if (rows < 0 || cols < 0) {
         LPXLOPER12 op = NewXLOPER12();
         op->xltype = xltypeErr | xlbitDLLFree;
-        op->val.err = xlerrValue;
+        op->val.err = (int)protocol::XlError::Value;
         return op;
     }
 
     if (cols > 0 && (size_t)rows > SIZE_MAX / (size_t)cols) {
         LPXLOPER12 op = NewXLOPER12();
         op->xltype = xltypeErr | xlbitDLLFree;
-        op->val.err = xlerrValue;
+        op->val.err = (int)protocol::XlError::Value;
         return op;
     }
 
@@ -301,7 +301,7 @@ LPXLOPER12 GridToXLOPER12(const protocol::Grid* grid) {
         !grid->data() || grid->data()->size() != count) {
         LPXLOPER12 op = NewXLOPER12();
         op->xltype = xltypeErr | xlbitDLLFree;
-        op->val.err = xlerrValue;
+        op->val.err = (int)protocol::XlError::Value;
         return op;
     }
 
@@ -309,7 +309,7 @@ LPXLOPER12 GridToXLOPER12(const protocol::Grid* grid) {
     if (count > SIZE_MAX / sizeof(XLOPER12)) {
          LPXLOPER12 op = NewXLOPER12();
          op->xltype = xltypeErr | xlbitDLLFree;
-         op->val.err = xlerrValue;
+         op->val.err = (int)protocol::XlError::Value;
          return op;
     }
 
@@ -363,7 +363,7 @@ LPXLOPER12 GridToXLOPER12(const protocol::Grid* grid) {
             }
             case protocol::ScalarValue::Err:
                 cell.xltype = xltypeErr;
-                cell.val.err = (int)scalar->val_as_Err()->val() - 2000;
+                cell.val.err = (int)scalar->val_as_Err()->val();
                 break;
             default:
                 break;

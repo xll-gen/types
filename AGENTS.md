@@ -62,3 +62,4 @@ This project uses [Task](https://taskfile.dev/) for build automation.
 *   **Formatting**: Follow standard Go and C++ formatting guidelines.
 *   **Testing**: Ensure changes are verified. Since this is a library, unit tests (if added) should cover type conversions.
 *   **Workflow**: Before committing, fetch the latest state of the parent branch and merge it into your working branch.
+*   **Error Codes**: Error codes are ALWAYS 2000+ (both Protocol and Excel). NEVER subtract 2000.

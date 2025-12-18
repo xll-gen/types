@@ -75,7 +75,7 @@ void TestErrConversion() {
     flatbuffers::FlatBufferBuilder builder;
     XLOPER12 op;
     op.xltype = xltypeErr;
-    op.val.err = xlerrValue;
+    op.val.err = (int)protocol::XlError::Value;
 
     auto offset = ConvertAny(&op, builder);
     builder.Finish(offset);
@@ -86,7 +86,7 @@ void TestErrConversion() {
 
     LPXLOPER12 res = AnyToXLOPER12(any);
     assert(res->xltype == (xltypeErr | xlbitDLLFree));
-    assert(res->val.err == xlerrValue);
+    assert(res->val.err == (int)protocol::XlError::Value);
 
     xlAutoFree12(res);
     std::cout << "TestErrConversion passed" << std::endl;
