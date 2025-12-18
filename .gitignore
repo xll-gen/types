@@ -5,3 +5,6 @@ build/
 *.a
 *.exe
 *.test
+task
+flatc
+.task/
