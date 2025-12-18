@@ -64,6 +64,11 @@ flatbuffers::Offset<protocol::NumGrid> ConvertNumGrid(FP12* fp, flatbuffers::Fla
         return protocol::CreateNumGrid(builder, 0, 0, 0);
     }
 
+    // Safety check for vector allocation size (though FlatBuffers handles it, explicit check prevents huge alloc attempts)
+    if (count > SIZE_MAX / sizeof(double)) {
+         return protocol::CreateNumGrid(builder, 0, 0, 0);
+    }
+
     // FP12 array is double[]
     auto vec = builder.CreateVector(fp->array, count);
     return protocol::CreateNumGrid(builder, (uint32_t)rows, (uint32_t)cols, vec);
@@ -235,8 +240,8 @@ LPXLOPER12 AnyToXLOPER12(const protocol::Any* any) {
 LPXLOPER12 RangeToXLOPER12(const protocol::Range* range) {
     if (!range) return NULL;
 
-    // Security check: Ensure we don't overflow the WORD count or cause allocation overflow.
-    if (range->refs()->size() > std::numeric_limits<WORD>::max()) {
+    // Validate refs existence and count limits (XLOPER12 ref count is WORD/16-bit)
+    if (!range->refs() || range->refs()->size() > 65535) {
         LPXLOPER12 op = NewXLOPER12();
         op->xltype = xltypeErr | xlbitDLLFree;
         op->val.err = xlerrValue;
@@ -245,11 +250,21 @@ LPXLOPER12 RangeToXLOPER12(const protocol::Range* range) {
 
     LPXLOPER12 op = NewXLOPER12();
     op->xltype = xltypeRef | xlbitDLLFree;
-    op->val.mref.lpmref = (LPXLMREF12) new char[sizeof(XLMREF12) + sizeof(XLREF12) * range->refs()->size()];
+
+    // Safe allocation size calculation
+    size_t refs_count = range->refs()->size();
+    // XLMREF12 struct has 1 ref. We need space for (refs_count) refs in total.
+    // Base size is sizeof(XLMREF12).
+    // If refs_count > 1, we need (refs_count - 1) * sizeof(XLREF12) more.
+    // If refs_count == 0, we still allocate sizeof(XLMREF12) to be safe (contains 1 unused ref).
+    // Using a simpler formula that slightly over-allocates is safer against under-allocation.
+    // sizeof(XLMREF12) + sizeof(XLREF12) * refs_count
+
+    op->val.mref.lpmref = (LPXLMREF12) new char[sizeof(XLMREF12) + sizeof(XLREF12) * refs_count];
     op->val.mref.idSheet = 0;
 
-    op->val.mref.lpmref->count = (WORD)range->refs()->size();
-    for(size_t i=0; i<range->refs()->size(); ++i) {
+    op->val.mref.lpmref->count = (WORD)refs_count;
+    for(size_t i=0; i<refs_count; ++i) {
         const auto* r = range->refs()->Get(i);
         op->val.mref.lpmref->reftbl[i].rwFirst = r->row_first();
         op->val.mref.lpmref->reftbl[i].rwLast = r->row_last();
@@ -265,14 +280,37 @@ LPXLOPER12 GridToXLOPER12(const protocol::Grid* grid) {
 
     int rows = grid->rows();
     int cols = grid->cols();
-    size_t count = (size_t)rows * cols;
 
-    if (rows < 0 || cols < 0 || count > (size_t)std::numeric_limits<int>::max() ||
-        !grid->data() || grid->data()->size() < count) {
+    if (rows < 0 || cols < 0) {
         LPXLOPER12 op = NewXLOPER12();
         op->xltype = xltypeErr | xlbitDLLFree;
         op->val.err = xlerrValue;
         return op;
+    }
+
+    if (cols > 0 && (size_t)rows > SIZE_MAX / (size_t)cols) {
+        LPXLOPER12 op = NewXLOPER12();
+        op->xltype = xltypeErr | xlbitDLLFree;
+        op->val.err = xlerrValue;
+        return op;
+    }
+
+    size_t count = (size_t)rows * (size_t)cols;
+
+    if (count > (size_t)std::numeric_limits<int>::max() ||
+        !grid->data() || grid->data()->size() != count) {
+        LPXLOPER12 op = NewXLOPER12();
+        op->xltype = xltypeErr | xlbitDLLFree;
+        op->val.err = xlerrValue;
+        return op;
+    }
+
+    // Check for allocation overflow (size_t)
+    if (count > SIZE_MAX / sizeof(XLOPER12)) {
+         LPXLOPER12 op = NewXLOPER12();
+         op->xltype = xltypeErr | xlbitDLLFree;
+         op->val.err = xlerrValue;
+         return op;
     }
 
     LPXLOPER12 op = NewXLOPER12();
@@ -301,10 +339,33 @@ LPXLOPER12 GridToXLOPER12(const protocol::Grid* grid) {
                 break;
             case protocol::ScalarValue::Str: {
                 cell.xltype = xltypeStr;
-                std::wstring ws = StringToWString(scalar->val_as_Str()->val()->str());
-                auto vec = WStringToPascalString(ws);
-                cell.val.str = new XCHAR[vec.size()];
-                std::copy(vec.begin(), vec.end(), cell.val.str);
+                const auto* fbStr = scalar->val_as_Str()->val();
+                if (!fbStr) {
+                    cell.val.str = new XCHAR[2];
+                    cell.val.str[0] = 0;
+                    cell.val.str[1] = 0;
+                } else {
+                    const char* utf8 = fbStr->c_str();
+                    int utf8Len = fbStr->size();
+                    // CP_UTF8 = 65001
+                    int needed = MultiByteToWideChar(65001, 0, utf8, utf8Len, NULL, 0);
+
+                    // Clamp to Excel 12 limit (32767 chars) to prevent huge allocations/overflows
+                    if (needed > 32767) needed = 32767;
+                    if (needed < 0) needed = 0;
+
+                    cell.val.str = new XCHAR[needed + 2];
+                    if (needed > 0) {
+                        if (MultiByteToWideChar(65001, 0, utf8, utf8Len, cell.val.str + 1, needed) == 0) {
+                            // Conversion failed (buffer too small or invalid input).
+                            // Fallback to empty string.
+                            needed = 0;
+                        }
+                    }
+
+                    cell.val.str[0] = (XCHAR)needed;
+                    cell.val.str[needed + 1] = 0;
+                }
                 break;
             }
             case protocol::ScalarValue::Err:
@@ -323,12 +384,27 @@ FP12* NumGridToFP12(const protocol::NumGrid* grid) {
     if (!grid) return NULL;
     int rows = grid->rows();
     int cols = grid->cols();
-    size_t count = (size_t)rows * cols;
 
-    if (rows < 0 || cols < 0 || count > (size_t)std::numeric_limits<int>::max() ||
-        !grid->data() || grid->data()->size() < count) {
+    if (rows < 0 || cols < 0) {
+        return NewFP12(0, 0);
+    }
+
+    if (cols > 0 && (size_t)rows > SIZE_MAX / (size_t)cols) {
+        return NewFP12(0, 0);
+    }
+
+    size_t count = (size_t)rows * (size_t)cols;
+
+    if (count > (size_t)std::numeric_limits<int>::max() ||
+        !grid->data() || grid->data()->size() != count) {
         // Return 0x0
         return NewFP12(0, 0);
+    }
+
+    // Check for allocation overflow (size_t) for FP12 (8 bytes per double)
+    // NewFP12 calculates size: 2*int + count*8.
+    if (count > (SIZE_MAX - 2*sizeof(int)) / sizeof(double)) {
+         return NewFP12(0, 0);
     }
 
     FP12* fp = NewFP12(rows, cols);
