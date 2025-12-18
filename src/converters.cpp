@@ -7,6 +7,7 @@
 #include <algorithm>
 #include <limits>
 #include <new>
+#include <cstring> // for std::memset
 
 // Excel -> FlatBuffers Converters
 
@@ -346,9 +347,6 @@ LPXLOPER12 GridToXLOPER12(const protocol::Grid* grid) {
     // RAII guard to clean up if exception happens or return early
     // Note: We need to use a custom cleanup because we might have partially allocated strings.
     // Standard xlAutoFree12 expects a fully valid structure or at least valid pointers.
-    // Since we zero-init via default constructor of XLOPER12 (implicit in new[]?),
-    // wait, new XLOPER12[count] calls default ctor? XLOPER12 is a C struct.
-    // C++ rule: new T[N] default initializes. For POD struct, it might not zero init.
     // We MUST zero init the array to be safe for partial cleanup.
     std::memset(op->val.array.lparray, 0, count * sizeof(XLOPER12));
 
@@ -398,12 +396,19 @@ LPXLOPER12 GridToXLOPER12(const protocol::Grid* grid) {
                         // CP_UTF8 = 65001
                         int needed = MultiByteToWideChar(65001, 0, utf8, utf8Len, NULL, 0);
 
+                        // Clamp to Excel 12 limit (32767 chars) to prevent huge allocations/overflows
+                        if (needed > 32767) needed = 32767;
+                        if (needed < 0) needed = 0;
+
                         cell.val.str = new XCHAR[needed + 2];
                         if (needed > 0) {
-                            MultiByteToWideChar(65001, 0, utf8, utf8Len, cell.val.str + 1, needed);
+                            if (MultiByteToWideChar(65001, 0, utf8, utf8Len, cell.val.str + 1, needed) == 0) {
+                                // Conversion failed (buffer too small or invalid input).
+                                // Fallback to empty string.
+                                needed = 0;
+                            }
                         }
 
-                        if (needed > 32767) needed = 32767;
                         cell.val.str[0] = (XCHAR)needed;
                         cell.val.str[needed + 1] = 0;
                     }
