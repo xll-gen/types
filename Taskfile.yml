@@ -1,0 +1,33 @@
+version: '3'
+
+tasks:
+  default:
+    desc: Build the project
+    cmds:
+      - task: build
+
+  build:
+    desc: Configure and build the project
+    cmds:
+      - cmake --preset default
+      - cmake --build --preset default
+
+  test:
+    desc: Run tests
+    cmds:
+      - ctest --preset default
+
+  format:
+    desc: Format C++ and Go code
+    cmds:
+      - cmake --build --preset default --target format
+
+  generate:
+    desc: Regenerate FlatBuffers code
+    cmds:
+      - cmake --build --preset default --target generate
+
+  clean:
+    desc: Clean build directory
+    cmds:
+      - rm -rf build

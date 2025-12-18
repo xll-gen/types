@@ -43,3 +43,47 @@ install(TARGETS xll-gen-types
     RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}
 )
 install(DIRECTORY include/types DESTINATION ${CMAKE_INSTALL_INCLUDEDIR})
+
+# Custom Targets
+
+# 1. Generate FlatBuffers code
+# We rely on 'flatc' target being available from flatbuffers dependency
+if(TARGET flatc)
+    add_custom_target(generate
+        COMMAND $<TARGET_FILE:flatc> --go -o ${CMAKE_CURRENT_SOURCE_DIR}/go/ ${CMAKE_CURRENT_SOURCE_DIR}/go/protocol/protocol.fbs
+        COMMAND $<TARGET_FILE:flatc> --cpp --scoped-enums -o ${CMAKE_CURRENT_SOURCE_DIR}/include/types ${CMAKE_CURRENT_SOURCE_DIR}/go/protocol/protocol.fbs
+        WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+        COMMENT "Regenerating FlatBuffers code (Go and C++)"
+    )
+endif()
+
+# 2. Format code
+find_program(CLANG_FORMAT clang-format)
+find_program(GO_EXEC go)
+
+add_custom_target(format)
+
+if(CLANG_FORMAT)
+    # Glob sources to format
+    file(GLOB_RECURSE CPP_SOURCES
+        "${CMAKE_CURRENT_SOURCE_DIR}/src/*.cpp"
+        "${CMAKE_CURRENT_SOURCE_DIR}/src/*.h"
+        "${CMAKE_CURRENT_SOURCE_DIR}/include/*.h"
+        "${CMAKE_CURRENT_SOURCE_DIR}/tests/*.cpp"
+    )
+    add_custom_target(format_cpp
+        COMMAND ${CLANG_FORMAT} -i ${CPP_SOURCES}
+        WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+        COMMENT "Formatting C++ sources"
+    )
+    add_dependencies(format format_cpp)
+endif()
+
+if(GO_EXEC)
+    add_custom_target(format_go
+        COMMAND ${GO_EXEC} fmt ./...
+        WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+        COMMENT "Formatting Go sources"
+    )
+    add_dependencies(format format_go)
+endif()

@@ -152,7 +152,7 @@ This library includes the standard Excel C API definitions (SDK Version 15.0), d
 
 ## Development
 
-This project provides a `Makefile` to automate common development tasks.
+This project uses [Task](https://taskfile.dev) to automate development tasks.
 
 ### Prerequisites
 
@@ -160,11 +160,14 @@ This project provides a `Makefile` to automate common development tasks.
 *   Go 1.18+
 *   C++ Compiler (C++17 support)
 *   `clang-format` (optional, for formatting)
+*   [Task](https://taskfile.dev/installation/)
 
 ### Commands
 
-*   `make build`: Configures and builds the project (Debug mode by default).
-*   `make test`: Runs unit tests.
-*   `make format`: Formats C++ and Go code.
-*   `make generate`: Regenerates Go and C++ code from `protocol.fbs`. Requires `flatc` (will use the one built by `make build` if available).
-*   `make clean`: Removes the build directory.
+*   **Build**: `task build` (configures and builds).
+*   **Test**: `task test` (runs unit tests).
+*   **Format**: `task format` (formats C++ and Go files).
+*   **Generate**: `task generate` (regenerates Go and C++ code).
+*   **Clean**: `task clean` (removes build directory).
+
+If you don't have `task` installed, you can run the underlying CMake commands directly (see `Taskfile.yml` for details).
