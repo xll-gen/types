@@ -235,6 +235,14 @@ LPXLOPER12 AnyToXLOPER12(const protocol::Any* any) {
 LPXLOPER12 RangeToXLOPER12(const protocol::Range* range) {
     if (!range) return NULL;
 
+    // Security check: Ensure we don't overflow the WORD count or cause allocation overflow.
+    if (range->refs()->size() > std::numeric_limits<WORD>::max()) {
+        LPXLOPER12 op = NewXLOPER12();
+        op->xltype = xltypeErr | xlbitDLLFree;
+        op->val.err = xlerrValue;
+        return op;
+    }
+
     LPXLOPER12 op = NewXLOPER12();
     op->xltype = xltypeRef | xlbitDLLFree;
     op->val.mref.lpmref = (LPXLMREF12) new char[sizeof(XLMREF12) + sizeof(XLREF12) * range->refs()->size()];

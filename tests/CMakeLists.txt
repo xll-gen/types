@@ -12,3 +12,8 @@ add_executable(logging_test test_logging.cpp)
 target_link_libraries(logging_test PRIVATE xll-gen-types)
 target_include_directories(logging_test PRIVATE ${CMAKE_SOURCE_DIR}/include)
 add_test(NAME logging_test COMMAND logging_test)
+
+add_executable(security_test test_security_fixes.cpp)
+target_link_libraries(security_test PRIVATE xll-gen-types)
+target_include_directories(security_test PRIVATE ${CMAKE_SOURCE_DIR}/include)
+add_test(NAME security_test COMMAND security_test)
