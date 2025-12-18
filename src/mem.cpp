@@ -1,9 +1,11 @@
 #include "types/mem.h"
-#include "types/ObjectPool.h"
-#include "types/PascalString.h"
+
+#include <cstring>  // For memset, memcpy
 #include <mutex>
 #include <vector>
-#include <cstring> // For memset, memcpy
+
+#include "types/ObjectPool.h"
+#include "types/PascalString.h"
 
 static ObjectPool<XLOPER12> xloperPool;
 
@@ -36,7 +38,7 @@ LPXLOPER12 NewExcelString(const std::wstring& str) {
 
 // Thread-local storage for FP12 return values
 struct FP12Buffer {
-    std::vector<char> data; // Stores FP12 header + doubles
+    std::vector<char> data;  // Stores FP12 header + doubles
 };
 
 // Keep a few buffers per thread to allow safe returns without immediate overwrites
@@ -71,26 +73,24 @@ extern "C" void __stdcall xlAutoFree12(LPXLOPER12 p) {
             delete[] p->val.str;
             p->val.str = nullptr;
         }
-    }
-    else if (p->xltype & xltypeMulti) {
-         if (p->val.array.lparray) {
-             int count = p->val.array.rows * p->val.array.columns;
-             // We need to check if elements have allocated memory
-             // Note: This assumes we constructed the array.
-             // If we construct arrays, we should probably set xlbitDLLFree on string elements?
-             // But usually for xltypeMulti, we just clean up what we own.
-             for(int i=0; i<count; ++i) {
-                 LPXLOPER12 elem = &p->val.array.lparray[i];
-                 if ((elem->xltype & xltypeStr) && elem->val.str) {
-                      // Only delete if we assume we own it.
-                      // If we are consistent, we always allocate strings for return via new[]
-                      delete[] elem->val.str;
-                 }
-             }
-             delete[] p->val.array.lparray;
-         }
-    }
-    else if (p->xltype & xltypeRef) {
+    } else if (p->xltype & xltypeMulti) {
+        if (p->val.array.lparray) {
+            int count = p->val.array.rows * p->val.array.columns;
+            // We need to check if elements have allocated memory
+            // Note: This assumes we constructed the array.
+            // If we construct arrays, we should probably set xlbitDLLFree on string elements?
+            // But usually for xltypeMulti, we just clean up what we own.
+            for (int i = 0; i < count; ++i) {
+                LPXLOPER12 elem = &p->val.array.lparray[i];
+                if ((elem->xltype & xltypeStr) && elem->val.str) {
+                    // Only delete if we assume we own it.
+                    // If we are consistent, we always allocate strings for return via new[]
+                    delete[] elem->val.str;
+                }
+            }
+            delete[] p->val.array.lparray;
+        }
+    } else if (p->xltype & xltypeRef) {
         if (p->val.mref.lpmref) {
             delete[] (char*)p->val.mref.lpmref;
             p->val.mref.lpmref = nullptr;

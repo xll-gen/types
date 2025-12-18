@@ -6,6 +6,7 @@
 #endif
 #include <string>
 #include <vector>
+
 #include "xlcall.h"
 
 typedef wchar_t XLL_PASCAL_STRING;

@@ -1,6 +1,8 @@
 #include "types/utility.h"
-#include "types/mem.h"
+
 #include <vector>
+
+#include "types/mem.h"
 
 std::wstring StringToWString(const std::string& str) {
     if (str.empty()) return std::wstring();
@@ -37,7 +39,7 @@ LPXLOPER12 TempStr12(const wchar_t* txt) {
     if (len > 255) len = 255;
 
     strBuf[i][0] = (wchar_t)len;
-    if (len > 0) wmemcpy(strBuf[i]+1, txt, len);
+    if (len > 0) wmemcpy(strBuf[i] + 1, txt, len);
 
     op->val.str = strBuf[i];
     return op;
@@ -55,7 +57,7 @@ LPXLOPER12 TempInt12(int val) {
 
 std::string ConvertExcelString(const wchar_t* wstr) {
     if (!wstr) return "";
-    size_t len = (size_t)wstr[0]; // Pascal string length
+    size_t len = (size_t)wstr[0];  // Pascal string length
     if (len == 0) return "";
     std::wstring ws(wstr + 1, len);
     return WideToUtf8(ws);

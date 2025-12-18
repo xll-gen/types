@@ -4,8 +4,9 @@
 #else
 #include "types/win_compat.h"
 #endif
-#include "types/xlcall.h"
 #include <string>
+
+#include "types/xlcall.h"
 
 // Allocates an XLOPER12 from the thread-safe object pool and initializes it to empty.
 LPXLOPER12 NewXLOPER12();

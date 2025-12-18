@@ -1,7 +1,8 @@
 #include "types/PascalString.h"
-#include <vector>
+
+#include <algorithm>  // For std::min
 #include <string>
-#include <algorithm> // For std::min
+#include <vector>
 
 // Converts a C-style string to a Pascal-style string (length-prefixed).
 std::vector<char> CStringToPascalString(const std::string& c_str) {
@@ -51,9 +52,7 @@ std::wstring PascalString12ToWString(const wchar_t* pascal_str) {
     return std::wstring(pascal_str + 1, length);
 }
 
-std::wstring PascalToWString(const wchar_t* pascal_str) {
-    return PascalString12ToWString(pascal_str);
-}
+std::wstring PascalToWString(const wchar_t* pascal_str) { return PascalString12ToWString(pascal_str); }
 
 wchar_t* WStringToNewPascalString(const std::wstring& w_str) {
     auto vec = WStringToPascalString(w_str);

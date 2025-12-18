@@ -149,3 +149,22 @@ Header: `include/types/ObjectPool.h`
 Header: `include/types/xlcall.h`
 
 This library includes the standard Excel C API definitions (SDK Version 15.0), defining types like `XLOPER12`, `FP12`, `XLREF12`, etc., and the `Excel12` / `Excel12v` callbacks.
+
+## Development
+
+This project provides a `Makefile` to automate common development tasks.
+
+### Prerequisites
+
+*   CMake 3.24+
+*   Go 1.18+
+*   C++ Compiler (C++17 support)
+*   `clang-format` (optional, for formatting)
+
+### Commands
+
+*   `make build`: Configures and builds the project (Debug mode by default).
+*   `make test`: Runs unit tests.
+*   `make format`: Formats C++ and Go code.
+*   `make generate`: Regenerates Go and C++ code from `protocol.fbs`. Requires `flatc` (will use the one built by `make build` if available).
+*   `make clean`: Removes the build directory.

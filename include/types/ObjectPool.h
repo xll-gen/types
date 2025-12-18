@@ -1,11 +1,11 @@
 #ifndef OBJECT_POOL_H
 #define OBJECT_POOL_H
 
-#include <vector>
-#include <mutex>
 #include <array>
-#include <thread>
 #include <functional>
+#include <mutex>
+#include <thread>
+#include <vector>
 
 // A thread-safe object pool with sharded locking to reduce contention.
 template <typename T, size_t ShardCount = 16>
@@ -63,9 +63,7 @@ public:
         }
     }
 
-    ~ObjectPool() {
-        Clear();
-    }
+    ~ObjectPool() { Clear(); }
 };
 
-#endif // OBJECT_POOL_H
+#endif  // OBJECT_POOL_H

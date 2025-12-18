@@ -1,7 +1,8 @@
-#include <iostream>
 #include <cassert>
 #include <cstring>
+#include <iostream>
 #include <string>
+
 #include "types/converters.h"
 #include "types/mem.h"
 
@@ -37,7 +38,7 @@ void TestStrConversion() {
     // Manually create a pascal string for input
     op.val.str = new XCHAR[s.length() + 1];
     op.val.str[0] = (XCHAR)s.length();
-    for(size_t i=0; i<s.length(); ++i) op.val.str[i+1] = s[i];
+    for (size_t i = 0; i < s.length(); ++i) op.val.str[i + 1] = s[i];
 
     auto offset = ConvertAny(&op, builder);
     builder.Finish(offset);
@@ -49,7 +50,7 @@ void TestStrConversion() {
     LPXLOPER12 res = AnyToXLOPER12(any);
     assert(res->xltype == (xltypeStr | xlbitDLLFree));
     assert(res->val.str[0] == 11);
-    for(size_t i=0; i<11; ++i) assert(res->val.str[i+1] == s[i]);
+    for (size_t i = 0; i < 11; ++i) assert(res->val.str[i + 1] == s[i]);
 
     delete[] op.val.str;
     xlAutoFree12(res);
