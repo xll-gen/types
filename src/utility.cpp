@@ -3,10 +3,22 @@
 #include <vector>
 #include <cstdio>
 #include <cstdarg>
+#include <stdexcept>
+#include <limits>
 
 std::wstring StringToWString(const std::string& str) {
     if (str.empty()) return std::wstring();
+
+    if (str.size() > 10000000) {
+        throw std::runtime_error("String too long");
+    }
+    if (str.size() > (size_t)std::numeric_limits<int>::max()) {
+        throw std::runtime_error("String too long (overflow)");
+    }
+
     int size_needed = MultiByteToWideChar(CP_UTF8, 0, &str[0], (int)str.size(), NULL, 0);
+    if (size_needed <= 0) return std::wstring();
+
     std::wstring wstrTo(size_needed, 0);
     MultiByteToWideChar(CP_UTF8, 0, &str[0], (int)str.size(), &wstrTo[0], size_needed);
     return wstrTo;
