@@ -1,54 +1,33 @@
 version: '3'
 
-vars:
-  FLATC:
-    sh: 'if [ -f ./flatc ]; then echo "./flatc"; else echo "flatc"; fi'
-
 tasks:
   default:
-    desc: "Run configure, build, and test"
+    desc: Build the project
     cmds:
-      - task: all
-
-  all:
-    desc: "Configure, build, and test the project"
-    cmds:
-      - task: configure
       - task: build
-      - task: test
-
-  configure:
-    desc: "Configure CMake"
-    cmds:
-      - cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
-    sources:
-      - CMakeLists.txt
-      - cmake/**/*.cmake
 
   build:
-    desc: "Build the project"
-    deps: [configure]
+    desc: Configure and build the project
     cmds:
-      - cmake --build build --config Release
+      - cmake --preset default
+      - cmake --build --preset default
 
   test:
-    desc: "Run tests"
-    deps: [build]
+    desc: Run tests
     cmds:
-      - ctest --test-dir build -C Release --output-on-failure
+      - ctest --preset default
 
-  clean:
-    desc: "Clean build directory"
+  format:
+    desc: Format C++ and Go code
     cmds:
-      - rm -rf build
-
-  fmt:
-    desc: "Format C++ code"
-    cmds:
-      - find src include tests -name "*.cpp" -o -name "*.h" | xargs clang-format -i
+      - cmake --build --preset default --target format
 
   generate:
-    desc: "Generate code from FlatBuffers schema"
+    desc: Regenerate FlatBuffers code
     cmds:
-      - '{{.FLATC}} --cpp --scoped-enums -o include/types go/protocol/protocol.fbs'
-      - '{{.FLATC}} --go -o go/ go/protocol/protocol.fbs'
+      - cmake --build --preset default --target generate
+
+  clean:
+    desc: Clean build directory
+    cmds:
+      - rm -rf build
