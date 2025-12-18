@@ -4,6 +4,7 @@
 #include "types/PascalString.h"
 #include <vector>
 #include <algorithm>
+#include <limits>
 
 // Excel -> FlatBuffers Converters
 
@@ -27,12 +28,17 @@ flatbuffers::Offset<protocol::Grid> ConvertGrid(LPXLOPER12 op, flatbuffers::Flat
     if (op->xltype == xltypeMulti) {
         int rows = op->val.array.rows;
         int cols = op->val.array.columns;
-        int count = rows * cols;
+        size_t count = (size_t)rows * cols;
+
+        if (rows < 0 || cols < 0 || count > (size_t)std::numeric_limits<int>::max()) {
+             // Return empty grid on overflow or invalid dimensions
+             return protocol::CreateGrid(builder, 0, 0, 0);
+        }
 
         std::vector<flatbuffers::Offset<protocol::Scalar>> elements;
         elements.reserve(count);
 
-        for (int i = 0; i < count; ++i) {
+        for (size_t i = 0; i < count; ++i) {
             elements.push_back(ConvertScalar(op->val.array.lparray[i], builder));
         }
 
@@ -52,7 +58,11 @@ flatbuffers::Offset<protocol::NumGrid> ConvertNumGrid(FP12* fp, flatbuffers::Fla
     if (!fp) return protocol::CreateNumGrid(builder, 0, 0, 0);
     int rows = fp->rows;
     int cols = fp->columns;
-    int count = rows * cols;
+    size_t count = (size_t)rows * cols;
+
+    if (rows < 0 || cols < 0 || count > (size_t)std::numeric_limits<int>::max()) {
+        return protocol::CreateNumGrid(builder, 0, 0, 0);
+    }
 
     // FP12 array is double[]
     auto vec = builder.CreateVector(fp->array, count);
@@ -90,8 +100,15 @@ flatbuffers::Offset<protocol::Any> ConvertMultiToAny(const XLOPER12& op, flatbuf
     // Check if it's homogenous numbers -> NumGrid
     // Else -> Grid
     bool allNums = true;
-    int count = op.val.array.rows * op.val.array.columns;
-    for(int i=0; i<count; ++i) {
+    size_t count = (size_t)op.val.array.rows * op.val.array.columns;
+
+    // Overflow check handled in ConvertGrid calls or here if we use count.
+    if (op.val.array.rows < 0 || op.val.array.columns < 0 || count > (size_t)std::numeric_limits<int>::max()) {
+        // Fallback to empty Grid
+        return protocol::CreateAny(builder, protocol::AnyValue::Grid, protocol::CreateGrid(builder, 0, 0, 0).Union());
+    }
+
+    for(size_t i=0; i<count; ++i) {
         if (op.val.array.lparray[i].xltype != xltypeNum) {
             allNums = false;
             break;
@@ -102,7 +119,7 @@ flatbuffers::Offset<protocol::Any> ConvertMultiToAny(const XLOPER12& op, flatbuf
          // Create NumGrid
          std::vector<double> nums;
          nums.reserve(count);
-         for(int i=0; i<count; ++i) nums.push_back(op.val.array.lparray[i].val.num);
+         for(size_t i=0; i<count; ++i) nums.push_back(op.val.array.lparray[i].val.num);
          auto vec = builder.CreateVector(nums);
          auto ng = protocol::CreateNumGrid(builder, op.val.array.rows, op.val.array.columns, vec);
          return protocol::CreateAny(builder, protocol::AnyValue::NumGrid, ng.Union());
@@ -180,16 +197,26 @@ LPXLOPER12 AnyToXLOPER12(const protocol::Any* any) {
              const protocol::NumGrid* ng = any->val_as_NumGrid();
              int rows = ng->rows();
              int cols = ng->cols();
+             size_t count = (size_t)rows * cols;
+
+             if (rows < 0 || cols < 0 || count > (size_t)std::numeric_limits<int>::max() ||
+                 !ng->data() || ng->data()->size() < count) {
+                 LPXLOPER12 op = NewXLOPER12();
+                 op->xltype = xltypeErr | xlbitDLLFree;
+                 op->val.err = xlerrValue;
+                 return op;
+             }
+
              LPXLOPER12 op = NewXLOPER12();
              op->xltype = xltypeMulti | xlbitDLLFree;
              op->val.array.rows = rows;
              op->val.array.columns = cols;
-             op->val.array.lparray = new XLOPER12[rows * cols];
+             op->val.array.lparray = new XLOPER12[count];
 
              auto data = ng->data();
-             for(int i=0; i<rows*cols; ++i) {
+             for(size_t i=0; i<count; ++i) {
                  op->val.array.lparray[i].xltype = xltypeNum;
-                 op->val.array.lparray[i].val.num = data->Get(i);
+                 op->val.array.lparray[i].val.num = data->Get((flatbuffers::uoffset_t)i);
              }
              return op;
         }
@@ -230,15 +257,24 @@ LPXLOPER12 GridToXLOPER12(const protocol::Grid* grid) {
 
     int rows = grid->rows();
     int cols = grid->cols();
+    size_t count = (size_t)rows * cols;
+
+    if (rows < 0 || cols < 0 || count > (size_t)std::numeric_limits<int>::max() ||
+        !grid->data() || grid->data()->size() < count) {
+        LPXLOPER12 op = NewXLOPER12();
+        op->xltype = xltypeErr | xlbitDLLFree;
+        op->val.err = xlerrValue;
+        return op;
+    }
 
     LPXLOPER12 op = NewXLOPER12();
     op->xltype = xltypeMulti | xlbitDLLFree;
     op->val.array.rows = rows;
     op->val.array.columns = cols;
-    op->val.array.lparray = new XLOPER12[rows * cols];
+    op->val.array.lparray = new XLOPER12[count];
 
-    for (int i = 0; i < rows * cols; ++i) {
-        auto scalar = grid->data()->Get(i);
+    for (size_t i = 0; i < count; ++i) {
+        auto scalar = grid->data()->Get((flatbuffers::uoffset_t)i);
         auto& cell = op->val.array.lparray[i];
         cell.xltype = xltypeNil; // Default
 
@@ -279,12 +315,19 @@ FP12* NumGridToFP12(const protocol::NumGrid* grid) {
     if (!grid) return NULL;
     int rows = grid->rows();
     int cols = grid->cols();
+    size_t count = (size_t)rows * cols;
+
+    if (rows < 0 || cols < 0 || count > (size_t)std::numeric_limits<int>::max() ||
+        !grid->data() || grid->data()->size() < count) {
+        // Return 0x0
+        return NewFP12(0, 0);
+    }
 
     FP12* fp = NewFP12(rows, cols);
 
     const auto* data = grid->data();
-    for(int i=0; i<rows*cols; ++i) {
-        fp->array[i] = data->Get(i);
+    for(size_t i=0; i<count; ++i) {
+        fp->array[i] = data->Get((flatbuffers::uoffset_t)i);
     }
 
     return fp;
