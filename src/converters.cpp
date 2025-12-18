@@ -5,9 +5,25 @@
 #include <vector>
 #include <algorithm>
 
-// FlatBuffers Converters
+// Excel -> FlatBuffers Converters
 
-flatbuffers::Offset<protocol::Grid> GridToFlatBuffer(flatbuffers::FlatBufferBuilder& builder, LPXLOPER12 op) {
+flatbuffers::Offset<protocol::Scalar> ConvertScalar(const XLOPER12& cell, flatbuffers::FlatBufferBuilder& builder) {
+    if (cell.xltype == xltypeNum) {
+        return protocol::CreateScalar(builder, protocol::ScalarValue::Num, protocol::CreateNum(builder, cell.val.num).Union());
+    } else if (cell.xltype == xltypeInt) {
+        return protocol::CreateScalar(builder, protocol::ScalarValue::Int, protocol::CreateInt(builder, cell.val.w).Union());
+    } else if (cell.xltype == xltypeBool) {
+        return protocol::CreateScalar(builder, protocol::ScalarValue::Bool, protocol::CreateBool(builder, cell.val.xbool).Union());
+    } else if (cell.xltype == xltypeStr) {
+         return protocol::CreateScalar(builder, protocol::ScalarValue::Str, protocol::CreateStr(builder, builder.CreateString(ConvertExcelString(cell.val.str))).Union());
+    } else if (cell.xltype == xltypeErr) {
+         return protocol::CreateScalar(builder, protocol::ScalarValue::Err, protocol::CreateErr(builder, (protocol::XlError)cell.val.err).Union());
+    } else {
+         return protocol::CreateScalar(builder, protocol::ScalarValue::Nil, protocol::CreateNil(builder).Union());
+    }
+}
+
+flatbuffers::Offset<protocol::Grid> ConvertGrid(LPXLOPER12 op, flatbuffers::FlatBufferBuilder& builder) {
     if (op->xltype == xltypeMulti) {
         int rows = op->val.array.rows;
         int cols = op->val.array.columns;
@@ -17,20 +33,7 @@ flatbuffers::Offset<protocol::Grid> GridToFlatBuffer(flatbuffers::FlatBufferBuil
         elements.reserve(count);
 
         for (int i = 0; i < count; ++i) {
-            LPXLOPER12 cell = &op->val.array.lparray[i];
-            if (cell->xltype == xltypeNum) {
-                elements.push_back(protocol::CreateScalar(builder, protocol::ScalarValue::Num, protocol::CreateNum(builder, cell->val.num).Union()));
-            } else if (cell->xltype == xltypeInt) {
-                elements.push_back(protocol::CreateScalar(builder, protocol::ScalarValue::Int, protocol::CreateInt(builder, cell->val.w).Union()));
-            } else if (cell->xltype == xltypeBool) {
-                elements.push_back(protocol::CreateScalar(builder, protocol::ScalarValue::Bool, protocol::CreateBool(builder, cell->val.xbool).Union()));
-            } else if (cell->xltype == xltypeStr) {
-                 elements.push_back(protocol::CreateScalar(builder, protocol::ScalarValue::Str, protocol::CreateStr(builder, builder.CreateString(ConvertExcelString(cell->val.str))).Union()));
-            } else if (cell->xltype == xltypeErr) {
-                 elements.push_back(protocol::CreateScalar(builder, protocol::ScalarValue::Err, protocol::CreateErr(builder, (protocol::XlError)cell->val.err).Union()));
-            } else {
-                 elements.push_back(protocol::CreateScalar(builder, protocol::ScalarValue::Nil, protocol::CreateNil(builder).Union()));
-            }
+            elements.push_back(ConvertScalar(op->val.array.lparray[i], builder));
         }
 
         auto vec = builder.CreateVector(elements);
@@ -39,30 +42,13 @@ flatbuffers::Offset<protocol::Grid> GridToFlatBuffer(flatbuffers::FlatBufferBuil
 
     // Handle scalar as 1x1 Grid
     std::vector<flatbuffers::Offset<protocol::Scalar>> elements;
-    if (op->xltype == xltypeNum) {
-        elements.push_back(protocol::CreateScalar(builder, protocol::ScalarValue::Num, protocol::CreateNum(builder, op->val.num).Union()));
-    } else if (op->xltype == xltypeInt) {
-        elements.push_back(protocol::CreateScalar(builder, protocol::ScalarValue::Int, protocol::CreateInt(builder, op->val.w).Union()));
-    } else if (op->xltype == xltypeBool) {
-        elements.push_back(protocol::CreateScalar(builder, protocol::ScalarValue::Bool, protocol::CreateBool(builder, op->val.xbool).Union()));
-    } else if (op->xltype == xltypeStr) {
-            elements.push_back(protocol::CreateScalar(builder, protocol::ScalarValue::Str, protocol::CreateStr(builder, builder.CreateString(ConvertExcelString(op->val.str))).Union()));
-    } else if (op->xltype == xltypeErr) {
-            elements.push_back(protocol::CreateScalar(builder, protocol::ScalarValue::Err, protocol::CreateErr(builder, (protocol::XlError)op->val.err).Union()));
-    } else {
-            elements.push_back(protocol::CreateScalar(builder, protocol::ScalarValue::Nil, protocol::CreateNil(builder).Union()));
-    }
+    elements.push_back(ConvertScalar(*op, builder));
 
     auto vec = builder.CreateVector(elements);
     return protocol::CreateGrid(builder, 1, 1, vec);
 }
 
-flatbuffers::Offset<protocol::NumGrid> NumGridToFlatBuffer(flatbuffers::FlatBufferBuilder& builder, LPXLOPER12 op) {
-    // XLOPER12 input not supported for NumGrid, only FP12.
-    return protocol::CreateNumGrid(builder, 0, 0, 0);
-}
-
-flatbuffers::Offset<protocol::NumGrid> NumGridToFlatBuffer(flatbuffers::FlatBufferBuilder& builder, FP12* fp) {
+flatbuffers::Offset<protocol::NumGrid> ConvertNumGrid(FP12* fp, flatbuffers::FlatBufferBuilder& builder) {
     if (!fp) return protocol::CreateNumGrid(builder, 0, 0, 0);
     int rows = fp->rows;
     int cols = fp->columns;
@@ -73,8 +59,7 @@ flatbuffers::Offset<protocol::NumGrid> NumGridToFlatBuffer(flatbuffers::FlatBuff
     return protocol::CreateNumGrid(builder, (uint32_t)rows, (uint32_t)cols, vec);
 }
 
-flatbuffers::Offset<protocol::Range> RangeToFlatBuffer(flatbuffers::FlatBufferBuilder& builder, LPXLOPER12 op, const std::string& format = "") {
-    // Requires xltypeRef or SRRef
+flatbuffers::Offset<protocol::Range> ConvertRange(LPXLOPER12 op, flatbuffers::FlatBufferBuilder& builder, const std::string& format) {
     auto fmtOff = builder.CreateString(format);
 
     if (op->xltype & xltypeRef) {
@@ -101,7 +86,7 @@ flatbuffers::Offset<protocol::Range> RangeToFlatBuffer(flatbuffers::FlatBufferBu
 }
 
 // Helper for converting Multi to Any
-flatbuffers::Offset<protocol::Any> ConvertMultiToAny(XLOPER12& op, flatbuffers::FlatBufferBuilder& builder) {
+flatbuffers::Offset<protocol::Any> ConvertMultiToAny(const XLOPER12& op, flatbuffers::FlatBufferBuilder& builder) {
     // Check if it's homogenous numbers -> NumGrid
     // Else -> Grid
     bool allNums = true;
@@ -122,16 +107,12 @@ flatbuffers::Offset<protocol::Any> ConvertMultiToAny(XLOPER12& op, flatbuffers::
          auto ng = protocol::CreateNumGrid(builder, op.val.array.rows, op.val.array.columns, vec);
          return protocol::CreateAny(builder, protocol::AnyValue::NumGrid, ng.Union());
     } else {
-         auto g = GridToFlatBuffer(builder, &op);
+         auto g = ConvertGrid(const_cast<LPXLOPER12>(&op), builder);
          return protocol::CreateAny(builder, protocol::AnyValue::Grid, g.Union());
     }
 }
 
-flatbuffers::Offset<protocol::Range> ConvertRange(LPXLOPER12 op, flatbuffers::FlatBufferBuilder& builder, const std::string& format) {
-    return RangeToFlatBuffer(builder, op, format);
-}
-
-flatbuffers::Offset<protocol::Any> AnyToFlatBuffer(flatbuffers::FlatBufferBuilder& builder, LPXLOPER12 op) {
+flatbuffers::Offset<protocol::Any> ConvertAny(LPXLOPER12 op, flatbuffers::FlatBufferBuilder& builder) {
     if (op->xltype == xltypeNum) {
         return protocol::CreateAny(builder, protocol::AnyValue::Num, protocol::CreateNum(builder, op->val.num).Union());
     } else if (op->xltype == xltypeInt) {
@@ -154,8 +135,14 @@ flatbuffers::Offset<protocol::Any> AnyToFlatBuffer(flatbuffers::FlatBufferBuilde
     return protocol::CreateAny(builder, protocol::AnyValue::Nil, protocol::CreateNil(builder).Union());
 }
 
+// FlatBuffers -> Excel Converters
+
 LPXLOPER12 AnyToXLOPER12(const protocol::Any* any) {
-    if (!any) return NULL;
+    if (!any) {
+        LPXLOPER12 op = NewXLOPER12();
+        op->xltype = xltypeNil | xlbitDLLFree;
+        return op;
+    }
 
     switch (any->val_type()) {
         case protocol::AnyValue::Num: {
@@ -211,7 +198,9 @@ LPXLOPER12 AnyToXLOPER12(const protocol::Any* any) {
         }
         case protocol::AnyValue::Nil:
         default: {
-             return NULL;
+             LPXLOPER12 op = NewXLOPER12();
+             op->xltype = xltypeNil | xlbitDLLFree;
+             return op;
         }
     }
 }

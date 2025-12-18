@@ -13,6 +13,7 @@ add_library(xll-gen-types STATIC
     src/mem.cpp
     src/PascalString.cpp
     src/utility.cpp
+    src/win_compat.cpp
     src/xlcall.cpp
 )
 
@@ -23,7 +24,11 @@ target_include_directories(xll-gen-types PUBLIC
 )
 
 # Link dependencies
-target_link_libraries(xll-gen-types PUBLIC flatbuffers::flatbuffers)
+target_link_libraries(xll-gen-types PUBLIC flatbuffers)
+
+# Tests
+enable_testing()
+add_subdirectory(tests)
 
 # Install rules (optional, if you want to install)
 include(GNUInstallDirs)

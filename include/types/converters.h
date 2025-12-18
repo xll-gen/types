@@ -1,5 +1,9 @@
 #pragma once
+#ifdef _WIN32
 #include <windows.h>
+#else
+#include "types/win_compat.h"
+#endif
 #include "types/xlcall.h"
 #include "types/protocol_generated.h" // Needed for protocol:: types
 #include <flatbuffers/flatbuffers.h>
