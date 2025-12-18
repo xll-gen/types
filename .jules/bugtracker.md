@@ -120,3 +120,41 @@
 
 *   **My Judgment:**
     Modified `GridToXLOPER12` and `RangeToXLOPER12` to return a valid `XLOPER12` with `xltypeErr` (xlerrValue) instead of `NULL`. Modified `NumGridToFP12` to return a valid empty `FP12` (0x0) instead of `NULL`.
+
+## 8. Segfault in `GridToXLOPER12` Exception Handling
+
+*   **Status:** Resolved
+*   **Severity:** Critical
+*   **Description:**
+    In `GridToXLOPER12` (`src/converters.cpp`), the `ScopeGuard` logic for cleaning up upon exception is flawed.
+    If `new XLOPER12[count]` throws `std::bad_alloc`, the `lparray` pointer in the `XLOPER12` structure remains `NULL` (due to initial `memset`).
+    The `ScopeGuard`'s cleanup lambda iterates from `0` to `count` and attempts to access `op->val.array.lparray[i]`.
+    Since `lparray` is `NULL`, this dereference causes a Segmentation Fault (Crash), masking the original Out-Of-Memory exception and crashing the host application (Excel).
+
+*   **My Judgment:**
+    Modified `src/converters.cpp` to add a null check (`if (op->val.array.lparray)`) inside the `ScopeGuard`. This ensures that cleanup logic skips array iteration if the array allocation failed.
+
+## 9. Memory Leak in `NewExcelString`
+
+*   **Status:** Resolved
+*   **Severity:** High
+*   **Description:**
+    In `src/mem.cpp`, the function `NewExcelString` acquires an `XLOPER12` from the object pool and then allocates a buffer using `new wchar_t[]`.
+    If `new wchar_t[]` throws `std::bad_alloc`, the acquired `XLOPER12* p` is never released back to the pool, resulting in a leak of the pooled object.
+    Over time, or under memory pressure, this degrades the object pool's efficiency and leaks memory.
+
+*   **My Judgment:**
+    Implemented a `ScopeGuard` in `NewExcelString` (`src/mem.cpp`) that automatically releases the `XLOPER12` object if the function exits via exception (i.e., allocation failure) before the guard is dismissed.
+
+## 10. Integer Overflow in Go Validation Logic
+
+*   **Status:** Resolved
+*   **Severity:** Medium
+*   **Description:**
+    In `go/protocol/extensions.go`, the `Validate` methods for `Grid` and `NumGrid` calculate `expectedCount := rows * cols`.
+    `Rows` and `Cols` are `uint32`. Their product can exceed the range of a 64-bit integer (`int` in Go), or wrap around if `int` is 32-bit (unlikely on server, but possible).
+    Even on 64-bit systems, `(2^32-1) * (2^32-1)` overflows `int64`.
+    This overflow can potentially bypass validation if the wrapped value matches `DataLength`.
+
+*   **My Judgment:**
+    Modified `go/protocol/extensions.go` to cast dimensions to `uint64` before multiplication (`uint64(rows) * uint64(cols)`) and compared against `uint64(DataLength)`. This ensures robust validation even for maximal grid dimensions.
