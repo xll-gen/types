@@ -498,8 +498,11 @@ FP12* NumGridToFP12(const protocol::NumGrid* grid) {
     FP12* fp = NewFP12(rows, cols);
 
     const auto* data = grid->data();
-    for(size_t i=0; i<count; ++i) {
-        fp->array[i] = data->Get((flatbuffers::uoffset_t)i);
+    if (data) {
+        // Optimization: Use memcpy for bulk copy of doubles
+        // FlatBuffers stores vector data contiguously in little-endian.
+        // On x86/ARM little-endian systems, this is a direct copy.
+        std::memcpy(fp->array, data->data(), count * sizeof(double));
     }
 
     return fp;
