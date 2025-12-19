@@ -55,6 +55,10 @@ This project uses [Task](https://taskfile.dev/) for build automation.
 *   **Format**: `./task fmt`
 *   **All**: `./task` (runs configure, build, and test)
 
+## Design Decisions & Limitations
+
+*   **CommandWrapper**: The `CommandWrapper` table is used in `protocol.fbs` because FlatBuffers Go bindings do not currently support vectors of Unions (e.g., `[Command]`). The wrapper allows us to use `[CommandWrapper]` instead.
+
 ## Agent Guidelines
 
 *   **Modification**: When modifying `protocol.fbs`, you must regenerate the Go code and the C++ header (`protocol_generated.h`).
