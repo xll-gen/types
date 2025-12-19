@@ -7,6 +7,10 @@
 #include "types/utility.h"
 #include "types/mem.h"
 
+#ifdef _WIN32
+HINSTANCE g_hModule = NULL;
+#endif
+
 extern "C" void __stdcall xlAutoFree12(LPXLOPER12 p);
 
 void TestDoSProtection() {
