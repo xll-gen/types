@@ -59,6 +59,29 @@ This project uses [Task](https://taskfile.dev/) for build automation.
 
 *   **CommandWrapper**: The `CommandWrapper` table is used in `protocol.fbs` because FlatBuffers Go bindings do not currently support vectors of Unions (e.g., `[Command]`). The wrapper allows us to use `[CommandWrapper]` instead.
 
+## Co-Change Clusters
+
+Certain parts of the codebase are tightly coupled and must be updated together to preserve consistency.
+
+### Protocol Schema & Generated Code
+The `go/protocol/protocol.fbs` definition is the single source of truth for the data structures.
+1.  **Schema Source**: `go/protocol/protocol.fbs`.
+2.  **Generated C++**: `include/types/protocol_generated.h` must be regenerated via `flatc`.
+3.  **Generated Go**: `go/protocol/*.go` files must be regenerated via `flatc`.
+**Constraint**: Any change to `go/protocol/protocol.fbs` requires running the generation task (`task generate` or similar) to update both C++ and Go artifacts in the same commit.
+
+### Excel Conversion Logic
+When adding support for a new type in `protocol.fbs`:
+1.  **Schema**: Update `go/protocol/protocol.fbs`.
+2.  **C++ Converters**: Update `src/converters.cpp` and `include/types/converters.h` to map the new FlatBuffer type to `XLOPER12`.
+3.  **Go Helpers**: Update `go/protocol/extensions.go` or validation logic if the new type requires specific handling on the Go side.
+4.  **Deep Copy**: Update `go/protocol/deepcopy.go` if the new type requires manual deep copy logic (e.g., it contains pointers or nested structures).
+
+### Memory Management
+1.  **Allocator**: `src/mem.cpp` (implementing `xlAutoFree12`).
+2.  **Object Pool**: `include/types/ObjectPool.h`.
+**Constraint**: Changes to how `XLOPER12`s are allocated or freed must be reflected in both the allocation strategy (ObjectPool) and the cleanup callback (`xlAutoFree12`).
+
 ## Agent Guidelines
 
 *   **Modification**: When modifying `protocol.fbs`, you must regenerate the Go code and the C++ header (`protocol_generated.h`).
