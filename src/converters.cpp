@@ -412,7 +412,19 @@ LPXLOPER12 GridToXLOPER12(const protocol::Grid* grid) {
                         cell.val.str[1] = 0;
                     } else {
                         const char* utf8 = fbStr->c_str();
-                        int utf8Len = fbStr->size();
+                        size_t realLen = fbStr->size();
+
+                        // Optimization/Security: Excel 12 strings are limited to 32767 chars.
+                        // If the input is huge, we don't need to convert all of it just to truncate it.
+                        // 32767 chars can be at most ~132KB (4 bytes per char) in UTF-8.
+                        // We clamp the input to a safe margin (200,000 bytes) to prevent allocating
+                        // huge temporary buffers (e.g. 20MB) for strings that will be truncated anyway.
+                        // This also prevents integer overflow when casting size_t to int.
+                        if (realLen > 200000) {
+                            realLen = 200000;
+                        }
+                        int utf8Len = static_cast<int>(realLen);
+
                         // CP_UTF8 = 65001
                         int needed = MultiByteToWideChar(65001, 0, utf8, utf8Len, NULL, 0);
 
