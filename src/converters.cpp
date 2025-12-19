@@ -363,25 +363,11 @@ LPXLOPER12 GridToXLOPER12(const protocol::Grid* grid) {
     op->val.array.lparray = new XLOPER12[count];
 
     // RAII guard to clean up if exception happens or return early
-    // Note: We need to use a custom cleanup because we might have partially allocated strings.
-    // Standard xlAutoFree12 expects a fully valid structure or at least valid pointers.
-    // We MUST zero init the array to be safe for partial cleanup.
+    // We MUST zero init the array to be safe for partial cleanup by xlAutoFree12.
     std::memset(op->val.array.lparray, 0, count * sizeof(XLOPER12));
 
     ScopeGuard guard([&]() {
-        // Use the existing logic in xlAutoFree12-like manner but we don't call xlAutoFree12
-        // because that function assumes it's freeing the whole OP struct usually.
-        // Actually, we can reuse the logic:
-        // iterate and free strings, then delete array, then release OP.
-        if (op->val.array.lparray) {
-            for(size_t i=0; i<count; ++i) {
-                 if (op->val.array.lparray[i].xltype == xltypeStr && op->val.array.lparray[i].val.str) {
-                     delete[] op->val.array.lparray[i].val.str;
-                 }
-            }
-            delete[] op->val.array.lparray;
-        }
-        ReleaseXLOPER12(op);
+        xlAutoFree12(op);
     });
 
     try {

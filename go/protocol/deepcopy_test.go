@@ -1,8 +1,8 @@
 package protocol
 
 import (
-	"testing"
 	flatbuffers "github.com/google/flatbuffers/go"
+	"testing"
 )
 
 func TestScalar_Clone(t *testing.T) {
