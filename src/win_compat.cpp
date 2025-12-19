@@ -8,7 +8,7 @@
 // Global module handle definition
 void* g_hModule = nullptr;
 
-int MultiByteToWideChar(unsigned int CodePage, unsigned long dwFlags, const char* lpMultiByteStr, int cbMultiByte, wchar_t* lpWideCharStr, int cchWideChar) {
+int MultiByteToWideChar([[maybe_unused]] unsigned int CodePage, [[maybe_unused]] unsigned long dwFlags, const char* lpMultiByteStr, int cbMultiByte, wchar_t* lpWideCharStr, int cchWideChar) {
     std::string str;
     if (cbMultiByte == -1) str = lpMultiByteStr;
     else str.assign(lpMultiByteStr, cbMultiByte);
@@ -41,7 +41,7 @@ int MultiByteToWideChar(unsigned int CodePage, unsigned long dwFlags, const char
     }
 }
 
-int WideCharToMultiByte(unsigned int CodePage, unsigned long dwFlags, const wchar_t* lpWideCharStr, int cchWideChar, char* lpMultiByteStr, int cbMultiByte, const char* lpDefaultChar, int* lpUsedDefaultChar) {
+int WideCharToMultiByte([[maybe_unused]] unsigned int CodePage, [[maybe_unused]] unsigned long dwFlags, const wchar_t* lpWideCharStr, int cchWideChar, char* lpMultiByteStr, int cbMultiByte, [[maybe_unused]] const char* lpDefaultChar, [[maybe_unused]] int* lpUsedDefaultChar) {
     std::wstring wstr;
     if (cchWideChar == -1) wstr = lpWideCharStr;
     else wstr.assign(lpWideCharStr, cchWideChar);
@@ -73,12 +73,12 @@ int WideCharToMultiByte(unsigned int CodePage, unsigned long dwFlags, const wcha
     }
 }
 
-unsigned long GetModuleFileNameW(void* hModule, wchar_t* lpFilename, unsigned long nSize) {
+unsigned long GetModuleFileNameW([[maybe_unused]] void* hModule, wchar_t* lpFilename, [[maybe_unused]] unsigned long nSize) {
     if (nSize > 0 && lpFilename) lpFilename[0] = 0;
     return 0;
 }
 
-void* GetModuleHandle(const char* lpModuleName) { return nullptr; }
-void* GetProcAddress(void* hModule, const char* lpProcName) { return nullptr; }
+void* GetModuleHandle([[maybe_unused]] const char* lpModuleName) { return nullptr; }
+void* GetProcAddress([[maybe_unused]] void* hModule, [[maybe_unused]] const char* lpProcName) { return nullptr; }
 
 #endif
