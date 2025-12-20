@@ -295,38 +295,39 @@ LPXLOPER12 RangeToXLOPER12(const protocol::Range* range) {
         return op;
     }
 
-    LPXLOPER12 op = NewXLOPER12();
-    op->xltype = xltypeRef | xlbitDLLFree;
+    try {
+        LPXLOPER12 op = NewXLOPER12();
+        op->xltype = xltypeRef | xlbitDLLFree;
 
-    // Safe allocation size calculation
-    size_t refs_count = range->refs()->size();
+        // Safe allocation size calculation
+        size_t refs_count = range->refs()->size();
 
-    // Guard against leaks if new throws
-    ScopeGuard guard([&]() {
-        ReleaseXLOPER12(op);
-    });
+        // Guard against leaks if new throws
+        ScopeGuard guard([&]() {
+            ReleaseXLOPER12(op);
+        });
 
-    // XLMREF12 struct has 1 ref. We need space for (refs_count) refs in total.
-    // Base size is sizeof(XLMREF12).
-    // If refs_count > 1, we need (refs_count - 1) * sizeof(XLREF12) more.
-    // If refs_count == 0, we still allocate sizeof(XLMREF12) to be safe (contains 1 unused ref).
-    // Using a simpler formula that slightly over-allocates is safer against under-allocation.
-    // sizeof(XLMREF12) + sizeof(XLREF12) * refs_count
+        // XLMREF12 struct has 1 ref. We need space for (refs_count) refs in total.
+        op->val.mref.lpmref = (LPXLMREF12) new char[sizeof(XLMREF12) + sizeof(XLREF12) * refs_count];
+        op->val.mref.idSheet = 0;
 
-    op->val.mref.lpmref = (LPXLMREF12) new char[sizeof(XLMREF12) + sizeof(XLREF12) * refs_count];
-    op->val.mref.idSheet = 0;
+        op->val.mref.lpmref->count = (WORD)refs_count;
+        for(size_t i=0; i<refs_count; ++i) {
+            const auto* r = range->refs()->Get(i);
+            op->val.mref.lpmref->reftbl[i].rwFirst = r->row_first();
+            op->val.mref.lpmref->reftbl[i].rwLast = r->row_last();
+            op->val.mref.lpmref->reftbl[i].colFirst = r->col_first();
+            op->val.mref.lpmref->reftbl[i].colLast = r->col_last();
+        }
 
-    op->val.mref.lpmref->count = (WORD)refs_count;
-    for(size_t i=0; i<refs_count; ++i) {
-        const auto* r = range->refs()->Get(i);
-        op->val.mref.lpmref->reftbl[i].rwFirst = r->row_first();
-        op->val.mref.lpmref->reftbl[i].rwLast = r->row_last();
-        op->val.mref.lpmref->reftbl[i].colFirst = r->col_first();
-        op->val.mref.lpmref->reftbl[i].colLast = r->col_last();
+        guard.Dismiss();
+        return op;
+    } catch (...) {
+        LPXLOPER12 op = NewXLOPER12();
+        op->xltype = xltypeErr | xlbitDLLFree;
+        op->val.err = xlerrValue;
+        return op;
     }
-
-    guard.Dismiss();
-    return op;
 }
 
 LPXLOPER12 GridToXLOPER12(const protocol::Grid* grid) {
@@ -376,19 +377,9 @@ LPXLOPER12 GridToXLOPER12(const protocol::Grid* grid) {
     op->xltype = xltypeMulti | xlbitDLLFree;
     op->val.array.rows = rows;
     op->val.array.columns = cols;
-    op->val.array.lparray = new XLOPER12[count];
 
     // RAII guard to clean up if exception happens or return early
-    // Note: We need to use a custom cleanup because we might have partially allocated strings.
-    // Standard xlAutoFree12 expects a fully valid structure or at least valid pointers.
-    // We MUST zero init the array to be safe for partial cleanup.
-    std::memset(op->val.array.lparray, 0, count * sizeof(XLOPER12));
-
     ScopeGuard guard([&]() {
-        // Use the existing logic in xlAutoFree12-like manner but we don't call xlAutoFree12
-        // because that function assumes it's freeing the whole OP struct usually.
-        // Actually, we can reuse the logic:
-        // iterate and free strings, then delete array, then release OP.
         if (op->val.array.lparray) {
             for(size_t i=0; i<count; ++i) {
                  if (op->val.array.lparray[i].xltype == xltypeStr && op->val.array.lparray[i].val.str) {
@@ -401,6 +392,9 @@ LPXLOPER12 GridToXLOPER12(const protocol::Grid* grid) {
     });
 
     try {
+        op->val.array.lparray = new XLOPER12[count];
+        std::memset(op->val.array.lparray, 0, count * sizeof(XLOPER12));
+
         for (size_t i = 0; i < count; ++i) {
             auto scalar = grid->data()->Get((flatbuffers::uoffset_t)i);
             auto& cell = op->val.array.lparray[i];
@@ -445,21 +439,15 @@ LPXLOPER12 GridToXLOPER12(const protocol::Grid* grid) {
                         int needed = MultiByteToWideChar(65001, 0, utf8, utf8Len, NULL, 0);
 
                         // Safety check: Don't allocate huge memory for strings.
-                        // Excel only supports ~32k chars. We allow a bit more for intermediate buffer but cap it.
-                        // 10,000,000 is an arbitrary large limit (20MB) to prevent DoS/Overflow.
                         if (needed < 0 || needed > 10000000 || (size_t)needed > SIZE_MAX / sizeof(XCHAR) - 2) {
-                            // Too large, treat as empty or error.
-                            // We'll treat as empty string to be safe and avoid throwing.
                             cell.val.str = new XCHAR[2];
                             cell.val.str[0] = 0;
                             cell.val.str[1] = 0;
                         } else {
                             if (needed > 32767) {
-                                // Alloc full size first to ensure MultiByteToWideChar succeeds
                                 XCHAR* temp = new XCHAR[needed + 2];
                                 MultiByteToWideChar(65001, 0, utf8, utf8Len, temp + 1, needed);
 
-                                // Copy truncated content to final buffer
                                 cell.val.str = new XCHAR[32767 + 2];
                                 std::memcpy(cell.val.str + 1, temp + 1, 32767 * sizeof(XCHAR));
 
@@ -488,8 +476,10 @@ LPXLOPER12 GridToXLOPER12(const protocol::Grid* grid) {
             }
         }
     } catch (...) {
-        // Guard will clean up
-        throw;
+        LPXLOPER12 op = NewXLOPER12();
+        op->xltype = xltypeErr | xlbitDLLFree;
+        op->val.err = xlerrValue;
+        return op;
     }
 
     guard.Dismiss();
@@ -497,41 +487,49 @@ LPXLOPER12 GridToXLOPER12(const protocol::Grid* grid) {
 }
 
 FP12* NumGridToFP12(const protocol::NumGrid* grid) {
-    if (!grid) return NewFP12(0, 0);
-    int rows = grid->rows();
-    int cols = grid->cols();
+    try {
+        if (!grid) return NewFP12(0, 0);
+        int rows = grid->rows();
+        int cols = grid->cols();
 
-    if (rows < 0 || cols < 0) {
-        return NewFP12(0, 0);
+        if (rows < 0 || cols < 0) {
+            return NewFP12(0, 0);
+        }
+
+        if (cols > 0 && (size_t)rows > SIZE_MAX / (size_t)cols) {
+            return NewFP12(0, 0);
+        }
+
+        size_t count = (size_t)rows * (size_t)cols;
+
+        if (count > (size_t)std::numeric_limits<int>::max() ||
+            !grid->data() || grid->data()->size() != count) {
+            // Return 0x0
+            return NewFP12(0, 0);
+        }
+
+        // Check for allocation overflow (size_t) for FP12 (8 bytes per double)
+        // NewFP12 calculates size: 2*int + count*8.
+        if (count > (SIZE_MAX - 2*sizeof(int)) / sizeof(double)) {
+             return NewFP12(0, 0);
+        }
+
+        FP12* fp = NewFP12(rows, cols);
+
+        const auto* data = grid->data();
+        if (data) {
+             // Optimization: Use memcpy for bulk copy of doubles
+             // FlatBuffers stores vector data contiguously in little-endian.
+             // On x86/ARM little-endian systems, this is a direct copy.
+             std::memcpy(fp->array, data->data(), count * sizeof(double));
+        }
+
+        return fp;
+    } catch (...) {
+        try {
+            return NewFP12(0, 0);
+        } catch (...) {
+            return nullptr;
+        }
     }
-
-    if (cols > 0 && (size_t)rows > SIZE_MAX / (size_t)cols) {
-        return NewFP12(0, 0);
-    }
-
-    size_t count = (size_t)rows * (size_t)cols;
-
-    if (count > (size_t)std::numeric_limits<int>::max() ||
-        !grid->data() || grid->data()->size() != count) {
-        // Return 0x0
-        return NewFP12(0, 0);
-    }
-
-    // Check for allocation overflow (size_t) for FP12 (8 bytes per double)
-    // NewFP12 calculates size: 2*int + count*8.
-    if (count > (SIZE_MAX - 2*sizeof(int)) / sizeof(double)) {
-         return NewFP12(0, 0);
-    }
-
-    FP12* fp = NewFP12(rows, cols);
-
-    const auto* data = grid->data();
-    if (data) {
-        // Optimization: Use memcpy for bulk copy of doubles
-        // FlatBuffers stores vector data contiguously in little-endian.
-        // On x86/ARM little-endian systems, this is a direct copy.
-        std::memcpy(fp->array, data->data(), count * sizeof(double));
-    }
-
-    return fp;
 }
