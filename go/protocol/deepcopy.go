@@ -189,22 +189,9 @@ func (rcv *NumGrid) DeepCopy(b *flatbuffers.Builder) flatbuffers.UOffsetT {
 
 	l := rcv.DataLength()
 	NumGridStartDataVector(b, l)
-
-	// Optimization: Direct buffer access to avoid O(N) vtable lookups.
-	// WARNING: Field offset 8 corresponds to Data field in NumGrid table.
-	// This value MUST match the offset in the generated NumGrid.go.
-	// If protocol.fbs changes, this offset may change and MUST be updated here.
-	const dataFieldOffset = 8
-	tab := rcv.Table()
-	if o := flatbuffers.UOffsetT(tab.Offset(dataFieldOffset)); o != 0 {
-		start := tab.Vector(o)
-		for i := l - 1; i >= 0; i-- {
-			// Read directly from buffer, skipping redundant offset calculations
-			val := tab.GetFloat64(start + flatbuffers.UOffsetT(i*8))
-			b.PrependFloat64(val)
-		}
+	for i := l - 1; i >= 0; i-- {
+		b.PrependFloat64(rcv.Data(i))
 	}
-
 	dataOff := b.EndVector(l)
 
 	NumGridStart(b)
