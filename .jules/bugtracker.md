@@ -2,7 +2,7 @@
 
 ## 1. Critical Memory Leak in `GridToXLOPER12`
 
-*   **Status:** Resolved
+*   **Status:** Resolved (Verified)
 *   **Severity:** Critical
 *   **Description:**
     In `GridToXLOPER12` (src/converters.cpp), when converting a FlatBuffers `Grid` to `XLOPER12`, string elements are allocated using `new XCHAR[]`. However, the resulting `XLOPER12` element does not have `xlbitDLLFree` set. While `xlAutoFree12` (src/mem.cpp) correctly iterates through the array and deletes strings if `val.str` is present, there is a risk that if `xlAutoFree12` is not called (e.g., if the root `XLOPER` doesn't have `xlbitDLLFree` set properly, or if Excel manages the memory differently than expected for sub-elements), leaks will occur.
@@ -14,7 +14,7 @@
 
 ## 2. Integer Overflow in Grid Size Calculation
 
-*   **Status:** Resolved
+*   **Status:** Resolved (Verified)
 *   **Severity:** High
 *   **Description:**
     In `src/converters.cpp`, the calculation `size_t count = (size_t)rows * cols` handles the multiplication safely by promoting to `size_t` (assuming 64-bit). However, `rows` and `cols` are inputs from FlatBuffers. If the FlatBuffer contains extremely large values such that `rows * cols` exceeds `INT_MAX`, the code returns an empty grid or error.
@@ -40,7 +40,7 @@
 
 ## 3. Potential Null Pointer Dereference in `AnyToXLOPER12`
 
-*   **Status:** Resolved
+*   **Status:** Resolved (Verified)
 *   **Severity:** Medium
 *   **Description:**
     In `AnyToXLOPER12`, `any` is checked for null. However, inside `case protocol::AnyValue::NumGrid`, it calls `ng->data()`.
@@ -74,19 +74,25 @@
 
 ## 4. Missing Exception Handling for `new`
 
-*   **Status:** Resolved
-*   **Severity:** High
+*   **Status:** Resolved (Fixed)
+*   **Severity:** Critical
 *   **Description:**
     The code uses raw `new` and `new[]` extensively. If memory allocation fails, `std::bad_alloc` is thrown. Since these functions are likely called from `xlAutoOpen` or as UDFs from Excel, an uncaught C++ exception crashing the DLL is bad behavior (might crash Excel).
 
     Locations: `src/converters.cpp` (`new XLOPER12[]`, `new XCHAR[]`), `src/mem.cpp` (`new wchar_t[]`), `src/ObjectPool.h` (`new T()`).
 
+    **Regression Update:** While `AnyToXLOPER12` correctly catches exceptions, `GridToXLOPER12` in `src/converters.cpp` currently catches and *re-throws* (`throw;`) exceptions. Since `GridToXLOPER12` is a public API function, this allows exceptions to propagate to the caller (e.g., Excel), potentially causing crashes. Additionally, `RangeToXLOPER12` and `NumGridToFP12` completely lack `try-catch` blocks, leaving them vulnerable to crashes on allocation failure.
+
 *   **My Judgment:**
-    Wrapped `AnyToXLOPER12` and `GridToXLOPER12` main bodies in `try-catch (...)` blocks. They now return `xltypeErr` upon any C++ exception (including `bad_alloc`).
+    Modified `GridToXLOPER12`, `RangeToXLOPER12`, and `NumGridToFP12` in `src/converters.cpp`. All functions now wrap their bodies in `try-catch` blocks.
+    - `GridToXLOPER12`: Returns `xltypeErr` XLOPER on exception.
+    - `RangeToXLOPER12`: Returns `xltypeErr` XLOPER on exception.
+    - `NumGridToFP12`: Returns empty FP12 or `nullptr` (if emergency alloc fails) on exception.
+    Verified compilation and tests pass.
 
 ## 5. Integer Overflow in `AnyToXLOPER12` (NumGrid)
 
-*   **Status:** Resolved
+*   **Status:** Resolved (Verified)
 *   **Severity:** High
 *   **Description:**
     In `AnyToXLOPER12` (src/converters.cpp), the `NumGrid` case calculates `count = rows * cols` and then allocates `new XLOPER12[count]`.
@@ -98,7 +104,7 @@
 
 ## 6. String Allocation Denial of Service
 
-*   **Status:** Resolved
+*   **Status:** Resolved (Verified)
 *   **Severity:** Medium
 *   **Description:**
     In `GridToXLOPER12` (src/converters.cpp), strings are converted using `MultiByteToWideChar` with the full UTF-8 length.
@@ -111,7 +117,7 @@
 
 ## 7. Unsafe NULL Return Values
 
-*   **Status:** Resolved
+*   **Status:** Resolved (Verified)
 *   **Severity:** Medium
 *   **Description:**
     `GridToXLOPER12`, `RangeToXLOPER12`, and `NumGridToFP12` return `NULL` (nullptr) when inputs are invalid (e.g. `!grid`).
@@ -123,7 +129,7 @@
 
 ## 8. Segfault in `GridToXLOPER12` Exception Handling
 
-*   **Status:** Resolved
+*   **Status:** Resolved (Verified)
 *   **Severity:** Critical
 *   **Description:**
     In `GridToXLOPER12` (`src/converters.cpp`), the `ScopeGuard` logic for cleaning up upon exception is flawed.
@@ -136,7 +142,7 @@
 
 ## 9. Memory Leak in `NewExcelString`
 
-*   **Status:** Resolved
+*   **Status:** Resolved (Verified)
 *   **Severity:** High
 *   **Description:**
     In `src/mem.cpp`, the function `NewExcelString` acquires an `XLOPER12` from the object pool and then allocates a buffer using `new wchar_t[]`.
@@ -148,7 +154,7 @@
 
 ## 10. Integer Overflow in Go Validation Logic
 
-*   **Status:** Resolved
+*   **Status:** Resolved (Verified)
 *   **Severity:** Medium
 *   **Description:**
     In `go/protocol/extensions.go`, the `Validate` methods for `Grid` and `NumGrid` calculate `expectedCount := rows * cols`.
@@ -161,7 +167,7 @@
 
 ## 11. Denial of Service in String Conversion
 
-*   **Status:** Resolved
+*   **Status:** Resolved (Verified)
 *   **Severity:** High
 *   **Description:**
     In `src/utility.cpp`, the function `StringToWString` converts a `std::string` (UTF-8) to `std::wstring` using `MultiByteToWideChar`. It queries the required size and then constructs a `std::wstring` of that size.
@@ -173,7 +179,7 @@
 
 ## 12. Integer Overflow in String Conversion
 
-*   **Status:** Resolved
+*   **Status:** Resolved (Verified)
 *   **Severity:** Medium
 *   **Description:**
     In `src/utility.cpp`, `StringToWString` casts `str.size()` to `int` when calling `MultiByteToWideChar`.
@@ -187,7 +193,7 @@
 
 ## 13. String Truncation Logic Failure
 
-*   **Status:** Resolved
+*   **Status:** Resolved (Verified)
 *   **Severity:** High
 *   **Description:**
     In `src/converters.cpp`, `GridToXLOPER12` attempts to truncate strings longer than 32767 characters.
