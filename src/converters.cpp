@@ -105,59 +105,75 @@ flatbuffers::Offset<protocol::Range> ConvertRange(LPXLOPER12 op, flatbuffers::Fl
 
 // Helper for converting Multi to Any
 flatbuffers::Offset<protocol::Any> ConvertMultiToAny(const XLOPER12& op, flatbuffers::FlatBufferBuilder& builder) {
-    // Check if it's homogenous numbers -> NumGrid
-    // Else -> Grid
-    bool allNums = true;
-    size_t count = (size_t)op.val.array.rows * op.val.array.columns;
+    try {
+        // Check if it's homogenous numbers -> NumGrid
+        // Else -> Grid
+        bool allNums = true;
+        size_t count = (size_t)op.val.array.rows * op.val.array.columns;
 
-    // Overflow check handled in ConvertGrid calls or here if we use count.
-    if (op.val.array.rows < 0 || op.val.array.columns < 0 || count > (size_t)std::numeric_limits<int>::max()) {
-        // Fallback to empty Grid
-        return protocol::CreateAny(builder, protocol::AnyValue::Grid, protocol::CreateGrid(builder, 0, 0, 0).Union());
-    }
-
-    for(size_t i=0; i<count; ++i) {
-        if (op.val.array.lparray[i].xltype != xltypeNum) {
-            allNums = false;
-            break;
+        // Overflow check handled in ConvertGrid calls or here if we use count.
+        if (op.val.array.rows < 0 || op.val.array.columns < 0 || count > (size_t)std::numeric_limits<int>::max()) {
+            // Fallback to empty Grid
+            return protocol::CreateAny(builder, protocol::AnyValue::Grid, protocol::CreateGrid(builder, 0, 0, 0).Union());
         }
-    }
 
-    if (allNums) {
-         // Create NumGrid
-         std::vector<double> nums;
-         nums.reserve(count);
-         for(size_t i=0; i<count; ++i) nums.push_back(op.val.array.lparray[i].val.num);
-         auto vec = builder.CreateVector(nums);
-         auto ng = protocol::CreateNumGrid(builder, op.val.array.rows, op.val.array.columns, vec);
-         return protocol::CreateAny(builder, protocol::AnyValue::NumGrid, ng.Union());
-    } else {
-         auto g = ConvertGrid(const_cast<LPXLOPER12>(&op), builder);
-         return protocol::CreateAny(builder, protocol::AnyValue::Grid, g.Union());
+        for (size_t i = 0; i < count; ++i) {
+            if (op.val.array.lparray[i].xltype != xltypeNum) {
+                allNums = false;
+                break;
+            }
+        }
+
+        if (allNums) {
+            // Create NumGrid
+            std::vector<double> nums;
+            nums.reserve(count);
+            for (size_t i = 0; i < count; ++i) nums.push_back(op.val.array.lparray[i].val.num);
+            auto vec = builder.CreateVector(nums);
+            auto ng = protocol::CreateNumGrid(builder, op.val.array.rows, op.val.array.columns, vec);
+            return protocol::CreateAny(builder, protocol::AnyValue::NumGrid, ng.Union());
+        } else {
+            auto g = ConvertGrid(const_cast<LPXLOPER12>(&op), builder);
+            return protocol::CreateAny(builder, protocol::AnyValue::Grid, g.Union());
+        }
+    } catch (...) {
+        return protocol::CreateAny(builder, protocol::AnyValue::Err,
+                                   protocol::CreateErr(builder, protocol::XlError::Unknown).Union());
     }
 }
 
 flatbuffers::Offset<protocol::Any> ConvertAny(LPXLOPER12 op, flatbuffers::FlatBufferBuilder& builder) {
-    if (op->xltype == xltypeNum) {
-        return protocol::CreateAny(builder, protocol::AnyValue::Num, protocol::CreateNum(builder, op->val.num).Union());
-    } else if (op->xltype == xltypeInt) {
-        return protocol::CreateAny(builder, protocol::AnyValue::Int, protocol::CreateInt(builder, op->val.w).Union());
-    } else if (op->xltype == xltypeBool) {
-        return protocol::CreateAny(builder, protocol::AnyValue::Bool, protocol::CreateBool(builder, op->val.xbool).Union());
-    } else if (op->xltype == xltypeStr) {
-        return protocol::CreateAny(builder, protocol::AnyValue::Str, protocol::CreateStr(builder, builder.CreateString(ConvertExcelString(op->val.str))).Union());
-    } else if (op->xltype == xltypeErr) {
-        return protocol::CreateAny(builder, protocol::AnyValue::Err, protocol::CreateErr(builder, (protocol::XlError)op->val.err).Union());
-    } else if (op->xltype & (xltypeRef | xltypeSRef)) {
-        return protocol::CreateAny(builder, protocol::AnyValue::Range, ConvertRange(op, builder).Union());
+    try {
+        if (op->xltype == xltypeNum) {
+            return protocol::CreateAny(builder, protocol::AnyValue::Num,
+                                       protocol::CreateNum(builder, op->val.num).Union());
+        } else if (op->xltype == xltypeInt) {
+            return protocol::CreateAny(builder, protocol::AnyValue::Int,
+                                       protocol::CreateInt(builder, op->val.w).Union());
+        } else if (op->xltype == xltypeBool) {
+            return protocol::CreateAny(builder, protocol::AnyValue::Bool,
+                                       protocol::CreateBool(builder, op->val.xbool).Union());
+        } else if (op->xltype == xltypeStr) {
+            return protocol::CreateAny(builder, protocol::AnyValue::Str,
+                                       protocol::CreateStr(builder, builder.CreateString(ConvertExcelString(op->val.str)))
+                                           .Union());
+        } else if (op->xltype == xltypeErr) {
+            return protocol::CreateAny(builder, protocol::AnyValue::Err,
+                                       protocol::CreateErr(builder, (protocol::XlError)op->val.err).Union());
+        } else if (op->xltype & (xltypeRef | xltypeSRef)) {
+            return protocol::CreateAny(builder, protocol::AnyValue::Range, ConvertRange(op, builder).Union());
 
-    } else if (op->xltype & xltypeMulti) {
-        return ConvertMultiToAny(*op, builder);
-    } else if (op->xltype & (xltypeMissing | xltypeNil)) {
-         return protocol::CreateAny(builder, protocol::AnyValue::Nil, protocol::CreateNil(builder).Union());
+        } else if (op->xltype & xltypeMulti) {
+            return ConvertMultiToAny(*op, builder);
+        } else if (op->xltype & (xltypeMissing | xltypeNil)) {
+            return protocol::CreateAny(builder, protocol::AnyValue::Nil, protocol::CreateNil(builder).Union());
+        }
+
+        return protocol::CreateAny(builder, protocol::AnyValue::Nil, protocol::CreateNil(builder).Union());
+    } catch (...) {
+        return protocol::CreateAny(builder, protocol::AnyValue::Err,
+                                   protocol::CreateErr(builder, protocol::XlError::Unknown).Union());
     }
-
-    return protocol::CreateAny(builder, protocol::AnyValue::Nil, protocol::CreateNil(builder).Union());
 }
 
 // FlatBuffers -> Excel Converters
