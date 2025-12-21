@@ -22,3 +22,14 @@
 **Description:** In `go/protocol/deepcopy.go`, `AsyncHandle` (and potentially other future byte vectors) are copied byte-by-byte in a loop.
 **Impact:** Inefficient for large data.
 **Plan:** Use `CreateByteVector` (if available in generated bindings) or `CreateByteVector` logic to copy slices directly.
+
+## 5. Fix `XlError` Mapping
+**Status:** Completed
+**Description:** `XlError` enum values in `protocol.fbs` start at 2000, while Excel error codes start at 0. The C++ conversion logic was casting them directly, causing invalid error codes to be sent to/from Excel.
+**Action:** Added `ProtocolErrorToExcel` and `ExcelErrorToProtocol` helpers in `src/converters.cpp` to correctly offset the values by 2000. Updated `tests/test_converters.cpp` to verify correct mapping using real Excel values.
+
+## 6. Support `RefCache` and `AsyncHandle` in `AnyToXLOPER12`
+**Status:** Proposed
+**Description:** `AnyToXLOPER12` currently does not handle `RefCache` and `AsyncHandle` types, defaulting to `xltypeNil`.
+**Impact:** Potential data loss or incorrect behavior if these types are returned to Excel.
+**Plan:** Determine appropriate mapping (e.g., `xltypeBigData` or string representation) and implement.
