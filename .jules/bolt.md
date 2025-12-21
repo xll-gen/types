@@ -9,3 +9,7 @@
 ## 2024-05-23 - [FlatBuffers Go NumGrid Optimization Rejected]
 **Learning:** Hoisting vtable lookups in `NumGrid.DeepCopy` offered ~30% speedup but required hardcoding the field offset (8). This creates a fragile dependency on the generated schema that is too risky for maintenance.
 **Action:** Do not implement optimizations that rely on hardcoded generated field offsets.
+
+## 2024-05-24 - Excel String Conversion Optimization
+**Learning:** Intermediate `std::wstring` allocations in string conversion helpers (like `ConvertExcelString`) add significant overhead (malloc + copy) for high-frequency operations.
+**Action:** Use platform APIs (like `WideCharToMultiByte`) directly on the source buffer when possible to eliminate intermediate objects.

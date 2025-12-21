@@ -71,8 +71,17 @@ std::string ConvertExcelString(const wchar_t* wstr) {
     if (!wstr) return "";
     size_t len = (size_t)wstr[0]; // Pascal string length
     if (len == 0) return "";
-    std::wstring ws(wstr + 1, len);
-    return WideToUtf8(ws);
+
+    if (len > (size_t)std::numeric_limits<int>::max()) {
+        return "";
+    }
+
+    int size_needed = WideCharToMultiByte(CP_UTF8, 0, wstr + 1, (int)len, NULL, 0, NULL, NULL);
+    if (size_needed <= 0) return "";
+
+    std::string strTo(size_needed, 0);
+    WideCharToMultiByte(CP_UTF8, 0, wstr + 1, (int)len, &strTo[0], size_needed, NULL, NULL);
+    return strTo;
 }
 
 bool IsSingleCell(LPXLOPER12 pxRef) {
