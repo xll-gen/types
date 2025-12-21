@@ -9,6 +9,7 @@ import (
 )
 
 func TestRangeValidation(t *testing.T) {
+	t.Parallel()
 	// Case 1: Range with > 65535 refs
 	b := flatbuffers.NewBuilder(0)
 
@@ -37,6 +38,7 @@ func TestRangeValidation(t *testing.T) {
 }
 
 func TestGridOverflowValidation(t *testing.T) {
+	t.Parallel()
 	// Case: Rows * Cols > MaxInt32
 	// Rows = MaxInt32, Cols = 2
 
