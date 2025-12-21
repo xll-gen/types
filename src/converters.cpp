@@ -9,6 +9,17 @@
 #include <new>
 #include <cstring> // for std::memset
 
+namespace {
+// Helper to map Excel error codes (0-255) to Protocol error codes (2000+)
+// If the error code is already >= 2000, it is preserved.
+protocol::XlError ToProtocolError(int xlerr) {
+    if (xlerr >= 0 && xlerr < 2000) {
+        return (protocol::XlError)(xlerr + 2000);
+    }
+    return (protocol::XlError)xlerr;
+}
+} // namespace
+
 // Excel -> FlatBuffers Converters
 
 // Helper functions (internal)
@@ -44,6 +55,11 @@ flatbuffers::Offset<protocol::Grid> ConvertGrid(LPXLOPER12 op, flatbuffers::Flat
 
         if (rows < 0 || cols < 0 || count > (size_t)std::numeric_limits<int>::max()) {
              // Return empty grid on overflow or invalid dimensions
+             return protocol::CreateGrid(builder, 0, 0, 0);
+        }
+
+        // Safety check: if grid dimensions are non-zero, lparray must not be null
+        if (count > 0 && !op->val.array.lparray) {
              return protocol::CreateGrid(builder, 0, 0, 0);
         }
 
@@ -124,6 +140,11 @@ flatbuffers::Offset<protocol::Any> ConvertMultiToAny(const XLOPER12& op, flatbuf
         if (op.val.array.rows < 0 || op.val.array.columns < 0 || count > (size_t)std::numeric_limits<int>::max()) {
             // Fallback to empty Grid
             return protocol::CreateAny(builder, protocol::AnyValue::Grid, protocol::CreateGrid(builder, 0, 0, 0).Union());
+        }
+
+        // Safety check: if grid dimensions are non-zero, lparray must not be null
+        if (count > 0 && !op.val.array.lparray) {
+             return protocol::CreateAny(builder, protocol::AnyValue::Grid, protocol::CreateGrid(builder, 0, 0, 0).Union());
         }
 
         for (size_t i = 0; i < count; ++i) {

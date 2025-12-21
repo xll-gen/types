@@ -22,3 +22,8 @@ add_executable(fixes_test test_fixes.cpp)
 target_link_libraries(fixes_test PRIVATE xll-gen-types)
 target_include_directories(fixes_test PRIVATE ${CMAKE_SOURCE_DIR}/include)
 add_test(NAME fixes_test COMMAND fixes_test)
+
+add_executable(null_safety_test test_null_safety.cpp)
+target_link_libraries(null_safety_test PRIVATE xll-gen-types)
+target_include_directories(null_safety_test PRIVATE ${CMAKE_SOURCE_DIR}/include)
+add_test(NAME null_safety_test COMMAND null_safety_test)
