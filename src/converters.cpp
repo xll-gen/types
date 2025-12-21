@@ -38,6 +38,11 @@ flatbuffers::Offset<protocol::Grid> ConvertGrid(LPXLOPER12 op, flatbuffers::Flat
              return protocol::CreateGrid(builder, 0, 0, 0);
         }
 
+        // Safety check: if grid dimensions are non-zero, lparray must not be null
+        if (count > 0 && !op->val.array.lparray) {
+             return protocol::CreateGrid(builder, 0, 0, 0);
+        }
+
         std::vector<flatbuffers::Offset<protocol::Scalar>> elements;
         elements.reserve(count);
 
@@ -115,6 +120,11 @@ flatbuffers::Offset<protocol::Any> ConvertMultiToAny(const XLOPER12& op, flatbuf
         if (op.val.array.rows < 0 || op.val.array.columns < 0 || count > (size_t)std::numeric_limits<int>::max()) {
             // Fallback to empty Grid
             return protocol::CreateAny(builder, protocol::AnyValue::Grid, protocol::CreateGrid(builder, 0, 0, 0).Union());
+        }
+
+        // Safety check: if grid dimensions are non-zero, lparray must not be null
+        if (count > 0 && !op.val.array.lparray) {
+             return protocol::CreateAny(builder, protocol::AnyValue::Grid, protocol::CreateGrid(builder, 0, 0, 0).Union());
         }
 
         for (size_t i = 0; i < count; ++i) {
