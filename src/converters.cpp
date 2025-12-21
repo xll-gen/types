@@ -9,6 +9,17 @@
 #include <new>
 #include <cstring> // for std::memset
 
+namespace {
+// Helper to map Excel error codes (0-255) to Protocol error codes (2000+)
+// If the error code is already >= 2000, it is preserved.
+protocol::XlError ToProtocolError(int xlerr) {
+    if (xlerr >= 0 && xlerr < 2000) {
+        return (protocol::XlError)(xlerr + 2000);
+    }
+    return (protocol::XlError)xlerr;
+}
+} // namespace
+
 // Excel -> FlatBuffers Converters
 
 flatbuffers::Offset<protocol::Scalar> ConvertScalar(const XLOPER12& cell, flatbuffers::FlatBufferBuilder& builder) {
@@ -21,7 +32,7 @@ flatbuffers::Offset<protocol::Scalar> ConvertScalar(const XLOPER12& cell, flatbu
     } else if (cell.xltype == xltypeStr) {
          return protocol::CreateScalar(builder, protocol::ScalarValue::Str, protocol::CreateStr(builder, builder.CreateString(ConvertExcelString(cell.val.str))).Union());
     } else if (cell.xltype == xltypeErr) {
-         return protocol::CreateScalar(builder, protocol::ScalarValue::Err, protocol::CreateErr(builder, (protocol::XlError)cell.val.err).Union());
+         return protocol::CreateScalar(builder, protocol::ScalarValue::Err, protocol::CreateErr(builder, ToProtocolError(cell.val.err)).Union());
     } else {
          return protocol::CreateScalar(builder, protocol::ScalarValue::Nil, protocol::CreateNil(builder).Union());
     }
@@ -159,7 +170,7 @@ flatbuffers::Offset<protocol::Any> ConvertAny(LPXLOPER12 op, flatbuffers::FlatBu
                                            .Union());
         } else if (op->xltype == xltypeErr) {
             return protocol::CreateAny(builder, protocol::AnyValue::Err,
-                                       protocol::CreateErr(builder, (protocol::XlError)op->val.err).Union());
+                                       protocol::CreateErr(builder, ToProtocolError(op->val.err)).Union());
         } else if (op->xltype & (xltypeRef | xltypeSRef)) {
             return protocol::CreateAny(builder, protocol::AnyValue::Range, ConvertRange(op, builder).Union());
 
