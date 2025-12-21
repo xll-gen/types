@@ -1,0 +1,35 @@
+# Proposals for xll-gen/types
+
+## 1. Enable Compiler Warnings
+**Status:** Completed
+**Description:** The `CMakeLists.txt` was updated to enable `-Wall -Wextra -Wpedantic` (or `/W4` on MSVC). This exposed unused parameter warnings in `src/win_compat.cpp`, which were subsequently fixed using `[[maybe_unused]]`.
+**Result:** Build is now cleaner and stricter.
+
+## 2. Replace Deprecated `std::wstring_convert`
+**Status:** Proposed
+**Description:** `src/win_compat.cpp` uses `std::wstring_convert` and `std::codecvt_utf8`, which are deprecated in C++17.
+**Impact:** Future compiler versions may remove these, breaking the Linux build (which relies on `win_compat`).
+**Plan:** Refactor `MultiByteToWideChar` and `WideCharToMultiByte` implementation in `win_compat.cpp` to use other mechanisms (e.g., `mbstowcs` with UTF-8 locale, or a lightweight library).
+
+## 3. Implement `GetXllDir` for Linux
+**Status:** Proposed
+**Description:** `src/utility.cpp` implements `GetXllDir` using `GetModuleFileNameW`. On Linux (via `win_compat`), this returns 0/empty string.
+**Impact:** Tests relying on file paths relative to the library location may fail or require workarounds on Linux.
+**Plan:** Implement `GetXllDir` using `/proc/self/exe` (Linux) or `dladdr` to find the shared library or executable path.
+
+## 4. Optimize Go DeepCopy for Byte Vectors
+**Status:** Proposed
+**Description:** In `go/protocol/deepcopy.go`, `AsyncHandle` (and potentially other future byte vectors) are copied byte-by-byte in a loop.
+**Impact:** Inefficient for large data.
+**Plan:** Use `CreateByteVector` (if available in generated bindings) or `CreateByteVector` logic to copy slices directly.
+
+## 5. Fix `XlError` Mapping
+**Status:** Completed
+**Description:** `XlError` enum values in `protocol.fbs` start at 2000, while Excel error codes start at 0. The C++ conversion logic was casting them directly, causing invalid error codes to be sent to/from Excel.
+**Action:** Added `ProtocolErrorToExcel` and `ExcelErrorToProtocol` helpers in `src/converters.cpp` to correctly offset the values by 2000. Updated `tests/test_converters.cpp` to verify correct mapping using real Excel values.
+
+## 6. Support `RefCache` and `AsyncHandle` in `AnyToXLOPER12`
+**Status:** Proposed
+**Description:** `AnyToXLOPER12` currently does not handle `RefCache` and `AsyncHandle` types, defaulting to `xltypeNil`.
+**Impact:** Potential data loss or incorrect behavior if these types are returned to Excel.
+**Plan:** Determine appropriate mapping (e.g., `xltypeBigData` or string representation) and implement.

@@ -81,18 +81,18 @@ void TestErrConversion() {
     flatbuffers::FlatBufferBuilder builder;
     XLOPER12 op;
     op.xltype = xltypeErr;
-    op.val.err = (int)protocol::XlError::Value;
+    op.val.err = 15; // xlerrValue
 
     auto offset = ConvertAny(&op, builder);
     builder.Finish(offset);
 
     auto* any = flatbuffers::GetRoot<protocol::Any>(builder.GetBufferPointer());
     assert(any->val_type() == protocol::AnyValue::Err);
-    assert(any->val_as_Err()->val() == protocol::XlError::Value);
+    assert(any->val_as_Err()->val() == protocol::XlError::Value); // 2015
 
     LPXLOPER12 res = AnyToXLOPER12(any);
     assert(res->xltype == (xltypeErr | xlbitDLLFree));
-    assert(res->val.err == (int)protocol::XlError::Value);
+    assert(res->val.err == 15);
 
     xlAutoFree12(res);
     std::cout << "TestErrConversion passed" << std::endl;
