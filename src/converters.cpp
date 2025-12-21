@@ -22,6 +22,15 @@ protocol::XlError ToProtocolError(int xlerr) {
 
 // Excel -> FlatBuffers Converters
 
+// Helper functions (internal)
+static int ProtocolErrorToExcel(protocol::XlError err) {
+    return (int)err - 2000;
+}
+
+static protocol::XlError ExcelErrorToProtocol(int err) {
+    return (protocol::XlError)(err + 2000);
+}
+
 flatbuffers::Offset<protocol::Scalar> ConvertScalar(const XLOPER12& cell, flatbuffers::FlatBufferBuilder& builder) {
     if (cell.xltype == xltypeNum) {
         return protocol::CreateScalar(builder, protocol::ScalarValue::Num, protocol::CreateNum(builder, cell.val.num).Union());
@@ -32,7 +41,7 @@ flatbuffers::Offset<protocol::Scalar> ConvertScalar(const XLOPER12& cell, flatbu
     } else if (cell.xltype == xltypeStr) {
          return protocol::CreateScalar(builder, protocol::ScalarValue::Str, protocol::CreateStr(builder, builder.CreateString(ConvertExcelString(cell.val.str))).Union());
     } else if (cell.xltype == xltypeErr) {
-         return protocol::CreateScalar(builder, protocol::ScalarValue::Err, protocol::CreateErr(builder, ToProtocolError(cell.val.err)).Union());
+         return protocol::CreateScalar(builder, protocol::ScalarValue::Err, protocol::CreateErr(builder, ExcelErrorToProtocol(cell.val.err)).Union());
     } else {
          return protocol::CreateScalar(builder, protocol::ScalarValue::Nil, protocol::CreateNil(builder).Union());
     }
@@ -180,7 +189,7 @@ flatbuffers::Offset<protocol::Any> ConvertAny(LPXLOPER12 op, flatbuffers::FlatBu
                                            .Union());
         } else if (op->xltype == xltypeErr) {
             return protocol::CreateAny(builder, protocol::AnyValue::Err,
-                                       protocol::CreateErr(builder, ToProtocolError(op->val.err)).Union());
+                                       protocol::CreateErr(builder, ExcelErrorToProtocol(op->val.err)).Union());
         } else if (op->xltype & (xltypeRef | xltypeSRef)) {
             return protocol::CreateAny(builder, protocol::AnyValue::Range, ConvertRange(op, builder).Union());
 
@@ -233,7 +242,7 @@ LPXLOPER12 AnyToXLOPER12(const protocol::Any* any) {
             case protocol::AnyValue::Err: {
                  LPXLOPER12 op = NewXLOPER12();
                  op->xltype = xltypeErr | xlbitDLLFree;
-                 op->val.err = (int)any->val_as_Err()->val();
+                 op->val.err = ProtocolErrorToExcel(any->val_as_Err()->val());
                  return op;
             }
             case protocol::AnyValue::Grid: {
@@ -490,7 +499,7 @@ LPXLOPER12 GridToXLOPER12(const protocol::Grid* grid) {
                 }
                 case protocol::ScalarValue::Err:
                     cell.xltype = xltypeErr;
-                    cell.val.err = (int)scalar->val_as_Err()->val();
+                    cell.val.err = ProtocolErrorToExcel(scalar->val_as_Err()->val());
                     break;
                 default:
                     break;
