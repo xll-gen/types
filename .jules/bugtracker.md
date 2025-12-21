@@ -210,3 +210,39 @@
     2. Attempt to truncate the source UTF-8 string (complex).
     3. Treat over-long strings as errors or empty.
     Given `XLOPER12` limitations, option 1 is safest for correctness if we must return partial data, or option 3 for safety. The current implementation attempts Option 1's result but fails to allocate enough memory for the intermediate step.
+
+## 14. Memory Leak in `RangeToXLOPER12`
+
+*   **Status:** Open (Log only)
+*   **Severity:** Low
+*   **Description:**
+    In `src/converters.cpp`, the function `RangeToXLOPER12` allocates `op->val.mref.lpmref` using `new`. If an exception occurs subsequently (e.g., inside the loop accessing FlatBuffers), the `ScopeGuard` cleans up `op` (returning it to the pool) but does not free the allocated `lpmref` buffer, causing a memory leak.
+*   **My Judgment:**
+    User decided to log only. No fix applied. Remediation would involve updating `ScopeGuard` to check for and delete `op->val.mref.lpmref`.
+
+## 15. Integer Overflow in `WideToUtf8`
+
+*   **Status:** Open (Log only)
+*   **Severity:** Low
+*   **Description:**
+    In `src/utility.cpp`, the function `WideToUtf8` converts `wstring` size to `int` when calling `WideCharToMultiByte`. If the string length exceeds `INT_MAX` (approx 2 billion characters), this cast causes integer overflow, potentially leading to incorrect buffer sizes or crashes.
+*   **My Judgment:**
+    User decided to log only. No fix applied. Remediation would involve checking `wstr.size()` against `INT_MAX`.
+
+## 16. Unsafe API Exposure (`ConvertGrid`)
+
+*   **Status:** Open (Log only)
+*   **Severity:** Medium
+*   **Description:**
+    `ConvertGrid` in `include/types/converters.h` is a public API that allocates memory based on input dimensions (`reserve`). It lacks a `try-catch` block. If called with a crafted FlatBuffer specifying huge dimensions, it may throw `std::bad_alloc`, potentially crashing the host application if the caller does not catch exceptions.
+*   **My Judgment:**
+    User decided to log only. No fix applied. Remediation would involve wrapping the function body in `try-catch`.
+
+## 17. Memory Leak in `AnyToXLOPER12` (NumGrid)
+
+*   **Status:** Open (Log only)
+*   **Severity:** Medium
+*   **Description:**
+    In `src/converters.cpp`, function `AnyToXLOPER12` (NumGrid case), `op` is allocated from the pool, then `lparray` is allocated using `new`. The `ScopeGuard` is defined *after* the `new` allocation. If `new` throws `std::bad_alloc`, the `ScopeGuard` is not yet established, and `op` is never released back to the pool, leading to a leak of the `XLOPER12` struct.
+*   **My Judgment:**
+    User decided to log only. No fix applied. Remediation would involve defining `ScopeGuard` immediately after acquiring `op`.
