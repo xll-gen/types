@@ -1,53 +1,42 @@
 # API 안전성 진단 및 개선 제안서
 
-본 문서는 `xll-gen/types` 리포지토리의 API 안전성 및 언어 간 불일치 사항을 진단하고 개선 방안을 제시합니다.
+본 문서는 `xll-gen/types` 리포지토리의 API 안전성 및 언어 간 불일치 사항을 진단하고, 이에 대한 개선 이력을 기록합니다.
 
-## 1. 진단 요약 (Diagnosis Summary)
+## 1. 진단 요약 (Executive Summary)
 
-전반적으로 C++ 구현체는 Excel의 메모리 제한과 오류 처리를 방어적으로 수행하고 있으나, Go 구현체는 입력값 검증이 일부 누락되어 있거나 C++(Excel)의 제약 사항과 일치하지 않는 부분이 존재합니다.
+C++ 구현체는 Excel의 메모리 및 호환성 제약을 잘 준수하고 있으나, **에러 코드 매핑 불일치**가 발견되었습니다. 해당 문제는 사용자의 정책 결정(Protocol -> Excel 방향은 2000 유지, Excel -> Protocol 방향은 매핑)에 따라 수정되었습니다.
 
-### 1.1 안전성 분석 (Safety Analysis)
+## 2. 언어 및 프로토콜 간 불일치 (Inconsistencies)
 
-*   **Go (`go/protocol`)**:
-    *   **OOM 취약점**: `DeepCopy` 및 `Clone` 메서드가 입력된 FlatBuffer의 `DataLength`를 기반으로 즉시 슬라이스를 할당(`make`)합니다. 검증되지 않은 거대 입력값이 주어질 경우 메모리 부족(OOM)으로 인한 패닉이 발생할 수 있습니다.
-    *   **검증 누락**: `Validate()` 함수가 존재하지만, `Clone` 호출 시에는 강제되지 않습니다.
-*   **C++ (`src/converters.cpp`)**:
-    *   **방어적 프로그래밍**: `GridToXLOPER12` 등에서 `try-catch` 블록과 `ScopeGuard`를 사용하여 메모리 할당 실패(`std::bad_alloc`)를 안전하게 처리(`xltypeErr` 반환)하고 있습니다.
-    *   **문자열 처리**: 입력 문자열을 200KB로 제한하고, 변환 후 32,767자(Excel 제한)로 잘라내어 버퍼 오버플로우 및 DoS를 방지합니다.
+### 2.1 [Resolved] 에러 코드 매핑 불일치
+*   **현상**: `protocol.fbs`의 `XlError` 열거형은 `Null = 2000`으로 정의되어 있으나, Excel 표준 에러 코드는 `0`부터 시작합니다.
+*   **정책 결정**:
+    *   **Protocol -> Excel**: `2000`번대 코드를 그대로 Excel로 전달합니다 (Excel에서 이를 수용하도록 설정됨).
+    *   **Excel -> Protocol**: Excel의 `0`번대 에러 코드를 Protocol의 `2000`번대 코드로 매핑합니다.
+*   **조치**: `src/converters.cpp`에 `ToProtocolError` 헬퍼 함수를 추가하여 Excel -> Protocol 변환 시 `+2000` 오프셋을 적용했습니다.
 
-### 1.2 언어 간 불일치 (Cross-Language Inconsistencies)
+### 2.2 [Minor] 미지원 타입 (Missing Types)
+*   **현상**: `RefCache`와 `AsyncHandle` 타입이 프로토콜에는 존재하나, C++ `AnyToXLOPER12` 변환 로직에서 `Nil`로 처리됩니다.
+*   **제안**: 추후 필요 시 명시적인 에러 반환으로 변경 고려.
 
-| 항목 | Go (Protcol) | C++ (Excel Adapter) | 불일치 위험 |
-| :--- | :--- | :--- | :--- |
-| **String Length** | 제한 없음 | 최대 32,767자 (Excel 제한), 입력 200KB 클램핑 | Go에서 긴 문자열 전송 시 C++에서 조용히 데이터가 잘림 (Data Truncation). |
-| **Grid Size** | `rows * cols <= MaxInt32` | `rows * cols <= int::max` (32bit) | 일치함 (안전). |
-| **Allocation** | `make` (패닉 가능) | `new` (예외 처리됨) | Go 서비스의 안정성 저하 가능성. |
-| **DeepCopy** | 재귀적 복사 수행 | (해당 없음, 변환만 수행) | - |
+### 2.3 [Minor] 문자열 길이 제한 (String Limits)
+*   **현상**: Go는 길이 제한이 없으나 C++(Excel)은 32,767자 제한이 있습니다.
+*   **C++ 안전성**: 입력 변환 시 200KB로 제한하고, Excel 변환 시 32,767자로 잘라내어(Truncation) 오버플로우를 방지하고 있습니다.
 
-## 2. 개선 방안 (Improvement Plan)
+## 3. 안전성 분석 (Safety Analysis)
 
-### 2.1 Go 패키지 안전성 강화 (단기)
+### 3.1 C++ (`src/converters.cpp`)
+*   **우수함 (Strong Safety)**:
+    *   **Integer Overflow**: `rows * cols` 및 메모리 할당 크기 검사 수행.
+    *   **Memory Safety**: `ScopeGuard`를 통한 RAII 패턴 적용.
+    *   **Exception Safety**: `try-catch` 블록으로 크래시 방지.
 
-1.  **String 길이 검증 추가**:
-    *   `Scalar` 및 `Grid`의 `Validate()` 메서드에 문자열 길이 체크 로직을 추가합니다.
-    *   Excel 호환성을 위해 32,767자를 초과하는 경우 경고 또는 에러를 반환하도록 `extensions.go`를 수정합니다.
+### 3.2 Go (`go/protocol`)
+*   **취약점 (Weakness)**:
+    *   **OOM Risk**: `DeepCopy` 시 입력 길이를 신뢰하여 메모리를 할당하므로, 악의적인 패킷에 의한 DoS 가능성이 존재합니다.
+    *   **Validation**: `Validate()` 호출이 강제되지 않습니다.
 
-2.  **DeepCopy 안전장치 마련**:
-    *   `DeepCopy` 내부에서 할당 크기가 비정상적으로 큰 경우(예: 100MB 이상) 에러를 반환하거나 패닉을 방지하는 로직은 FlatBuffers 구조상 어렵습니다.
-    *   대안으로, `Clone()` 메서드 진입 시 반드시 `Validate()`를 먼저 수행하도록 강제하거나 문서화합니다.
+## 4. 개선 이력 및 계획 (Action Plan)
 
-### 2.2 C++ 변환 로직 명확화
-
-1.  **데이터 손실 경고**:
-    *   문자열이 32,767자를 초과하여 잘릴 경우, 로그(`OutputDebugString`)를 남기거나, 엄격 모드(Strict Mode)에서는 `xltypeErr`를 반환하는 옵션을 고려해야 합니다.
-
-### 2.3 스키마 정의 강화
-
-1.  **protocol.fbs 명세화**:
-    *   주석을 통해 각 필드의 최대 제약 사항(Max Length, Max Rows 등)을 명시하여 클라이언트 구현 시 참고하도록 합니다.
-
-## 3. 실행 계획 (Action Items)
-
-1.  [Go] `go/protocol/extensions.go`: 문자열 길이(32k) 검증 로직 추가.
-2.  [Go] `go/protocol/extensions.go`: `DeepCopy` 전 검증 절차에 대한 가이드 추가.
-3.  [Doc] `go/protocol/protocol.fbs`: 제약 사항 주석 추가.
+1.  **[완료] 에러 코드 매핑 수정**: `src/converters.cpp` 수정 완료.
+2.  **[권장] Go 유효성 검증 강화**: `go/protocol/extensions.go`에 문자열 길이 체크 및 `DeepCopy` 전 검증 로직 추가 권장.
