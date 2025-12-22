@@ -222,12 +222,12 @@
 
 ## 15. Integer Overflow in `WideToUtf8`
 
-*   **Status:** Open (Log only)
+*   **Status:** Resolved (Verified)
 *   **Severity:** Low
 *   **Description:**
     In `src/utility.cpp`, the function `WideToUtf8` converts `wstring` size to `int` when calling `WideCharToMultiByte`. If the string length exceeds `INT_MAX` (approx 2 billion characters), this cast causes integer overflow, potentially leading to incorrect buffer sizes or crashes.
 *   **My Judgment:**
-    User decided to log only. No fix applied. Remediation would involve checking `wstr.size()` against `INT_MAX`.
+    Fixed by adding a check `if (wstr.size() > (size_t)std::numeric_limits<int>::max())` in `src/utility.cpp`. The function now returns an empty string on overflow. Verified with `tests/test_utility_safety.cpp`.
 
 ## 16. Unsafe API Exposure (`ConvertGrid`)
 

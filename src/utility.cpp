@@ -32,6 +32,12 @@ std::wstring ConvertToWString(const char* str) {
 
 std::string WideToUtf8(const std::wstring& wstr) {
     if (wstr.empty()) return "";
+
+    // Check for integer overflow when casting size_t to int
+    if (wstr.size() > (size_t)std::numeric_limits<int>::max()) {
+        return "";
+    }
+
     int size_needed = WideCharToMultiByte(CP_UTF8, 0, &wstr[0], (int)wstr.size(), NULL, 0, NULL, NULL);
     std::string strTo(size_needed, 0);
     WideCharToMultiByte(CP_UTF8, 0, &wstr[0], (int)wstr.size(), &strTo[0], size_needed, NULL, NULL);
