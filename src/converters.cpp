@@ -156,10 +156,13 @@ flatbuffers::Offset<protocol::Any> ConvertMultiToAny(const XLOPER12& op, flatbuf
 
         if (allNums) {
             // Create NumGrid
-            std::vector<double> nums;
-            nums.reserve(count);
-            for (size_t i = 0; i < count; ++i) nums.push_back(op.val.array.lparray[i].val.num);
-            auto vec = builder.CreateVector(nums);
+            // Optimization: Use CreateUninitializedVector to write directly to FlatBuffer memory,
+            // avoiding intermediate std::vector allocation and redundant copy.
+            double* buf = nullptr;
+            auto vec = builder.CreateUninitializedVector<double>(count, &buf);
+            for (size_t i = 0; i < count; ++i) {
+                buf[i] = op.val.array.lparray[i].val.num;
+            }
             auto ng = protocol::CreateNumGrid(builder, op.val.array.rows, op.val.array.columns, vec);
             return protocol::CreateAny(builder, protocol::AnyValue::NumGrid, ng.Union());
         } else {
