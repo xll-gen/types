@@ -115,6 +115,12 @@ func (rcv *AsyncHandle) DeepCopy(b *flatbuffers.Builder) flatbuffers.UOffsetT {
 		return 0
 	}
 
+	// Security check: ensure the buffer is large enough for the claimed vector length.
+	// AsyncHandle is [ubyte], so 1 byte per element.
+	if uint64(l) > uint64(len(rcv._tab.Bytes)) {
+		return 0
+	}
+
 	AsyncHandleStartValVector(b, l)
 	for i := l - 1; i >= 0; i-- {
 		b.PrependByte(rcv.Val(i))
@@ -152,6 +158,15 @@ func (rcv *Grid) DeepCopy(b *flatbuffers.Builder) flatbuffers.UOffsetT {
 
 	l := rcv.DataLength()
 	if l < 0 || l > math.MaxInt32 {
+		return 0
+	}
+
+	// Security check: ensure the buffer is large enough for the claimed vector length.
+	// Grid.Data is [Scalar], which is a vector of offsets (tables).
+	// Each element in the vector is a 32-bit (4-byte) offset.
+	// Note: rcv._tab.Bytes includes the whole buffer, not just the vector.
+	// This is a loose lower bound check but prevents massive over-allocation attacks.
+	if uint64(l)*4 > uint64(len(rcv._tab.Bytes)) {
 		return 0
 	}
 
@@ -198,6 +213,12 @@ func (rcv *NumGrid) DeepCopy(b *flatbuffers.Builder) flatbuffers.UOffsetT {
 
 	l := rcv.DataLength()
 	if l < 0 || l > math.MaxInt32 {
+		return 0
+	}
+
+	// Security check: ensure the buffer is large enough for the claimed vector length.
+	// NumGrid.Data is [double], so 8 bytes per element.
+	if uint64(l)*8 > uint64(len(rcv._tab.Bytes)) {
 		return 0
 	}
 
@@ -250,6 +271,12 @@ func (rcv *Range) DeepCopy(b *flatbuffers.Builder) flatbuffers.UOffsetT {
 	// Refs Vector of Structs
 	l := rcv.RefsLength()
 	if l < 0 || l > math.MaxInt32 {
+		return 0
+	}
+
+	// Security check: Range.Refs is [Rect]. Rect is a struct of 4 ints (4*4 = 16 bytes).
+	// A vector of structs stores the structs inline.
+	if uint64(l)*16 > uint64(len(rcv._tab.Bytes)) {
 		return 0
 	}
 
