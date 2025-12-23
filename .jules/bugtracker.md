@@ -184,16 +184,16 @@
 *   **Description:**
     In `src/utility.cpp`, `WideToUtf8` casts `wstring::size` to `int`. For strings > 2GB (unlikely but possible), this overflows, causing invalid arguments to `WideCharToMultiByte`.
 *   **My Judgment:**
-    This is a robustness issue. While 2GB strings are rare in Excel, the library should fail safely (throw or return empty) rather than invoking UB or crashing due to overflow. A simple size check is recommended.
+    Confirmed as present. The user decided to log this issue only and defer fixing it.
 
 ## 16. Unsafe API Exposure (`ConvertGrid`)
 
-*   **Status:** Resolved (Verified)
-*   **Severity:** Medium
+*   **Status:** Mitigated / Low Risk
+*   **Severity:** Low
 *   **Description:**
-    `ConvertGrid` in `include/types/converters.h` is a public API that allocates memory based on input dimensions (`reserve`). It previously lacked a `try-catch` block.
+    `ConvertGrid` was reported to lack exception handling.
 *   **My Judgment:**
-    Wrapped `ConvertGrid` and other top-level converters in `try-catch` blocks to safely handle `std::bad_alloc` and other exceptions, preventing host crashes.
+    Current code in `src/converters.cpp` has `try-catch (...)` blocks wrapping `ConvertGrid`. It returns an empty grid on exception. The risk of crashing the host is mitigated. However, `elements.reserve(count)` can still throw `std::bad_alloc` for huge counts, but it is caught. User decided to log only.
 
 ## 17. Memory Leak in `AnyToXLOPER12` (NumGrid)
 
@@ -213,13 +213,25 @@
     1. Runtime Panic (Index out of range) -> Service Crash.
     2. Memory Exhaustion (DoS) due to huge `Make` calls based on `Length`.
 *   **My Judgment:**
-    Verified as present in the latest codebase. User decided to log only. No fix applied.
+    Confirmed as present. The user decided to log this issue only and defer fixing it.
 
-## 18. DoS and Panic in Go DeepCopy
+## 18. Denial of Service in Go DeepCopy
 
 *   **Status:** Resolved (Verified)
 *   **Severity:** High
 *   **Description:**
-    In `go/protocol/deepcopy.go`, `DeepCopy` iterates based on vector length without validating the underlying buffer size or checking for integer overflow/excessive size.
+    In `go/protocol/deepcopy.go`, the `DeepCopy` methods for `Grid`, `NumGrid`, `Range`, and `AsyncHandle` allocate memory based on `DataLength` (or `RefsLength`, `ValLength`) from the FlatBuffer.
+    ```go
+    l := rcv.DataLength()
+    offsets := make([]flatbuffers.UOffsetT, l)
+    ```
+    If a malicious FlatBuffer specifies a huge length (e.g. 2 billion) but does not provide the corresponding data, this triggers a massive allocation (`make`), potentially causing the Go runtime to panic or exhaust memory (DoS). The loop following the allocation then iterates `l` times, compounding the CPU usage.
+    While `Validate` exists in `extensions.go`, `DeepCopy` does not call it and trusts the length field implicitly.
+
 *   **My Judgment:**
-    Added sanity checks (`l < 0 || l > math.MaxInt32`) to DeepCopy vector iterations to prevent integer overflow and excessive memory allocation.
+    Modified `go/protocol/deepcopy.go` to enforce security checks before allocation. The fix verifies that the underlying buffer (`rcv._tab.Bytes`) is large enough to contain the claimed vector elements.
+    - `Grid`: Checked `l * 4 <= len(bytes)`.
+    - `NumGrid`: Checked `l * 8 <= len(bytes)`.
+    - `Range`: Checked `l * 16 <= len(bytes)`.
+    - `AsyncHandle`: Checked `l * 1 <= len(bytes)`.
+    This prevents DoS attacks by rejecting malformed buffers with inflated length fields. Verified with tests.
