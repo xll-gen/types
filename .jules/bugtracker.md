@@ -231,12 +231,12 @@
 
 ## 16. Unsafe API Exposure (`ConvertGrid`)
 
-*   **Status:** Open (Log only)
+*   **Status:** Resolved (Verified)
 *   **Severity:** Medium
 *   **Description:**
-    `ConvertGrid` in `include/types/converters.h` is a public API that allocates memory based on input dimensions (`reserve`). It lacks a `try-catch` block. If called with a crafted FlatBuffer specifying huge dimensions, it may throw `std::bad_alloc`, potentially crashing the host application if the caller does not catch exceptions.
+    `ConvertGrid` in `include/types/converters.h` is a public API that allocates memory based on input dimensions (`reserve`). It previously lacked a `try-catch` block.
 *   **My Judgment:**
-    Verified as present in the latest codebase. User decided to log only. No fix applied.
+    Wrapped `ConvertGrid` and other top-level converters in `try-catch` blocks to safely handle `std::bad_alloc` and other exceptions, preventing host crashes.
 
 ## 17. Memory Leak in `AnyToXLOPER12` (NumGrid)
 
@@ -246,3 +246,12 @@
     In `src/converters.cpp`, function `AnyToXLOPER12` (NumGrid case), `op` is allocated from the pool, then `lparray` is allocated using `new`. The `ScopeGuard` is defined *after* the `new` allocation. If `new` throws `std::bad_alloc`, the `ScopeGuard` is not yet established, and `op` is never released back to the pool, leading to a leak of the `XLOPER12` struct.
 *   **My Judgment:**
     Verified as present in the latest codebase. User decided to log only. No fix applied.
+
+## 18. DoS and Panic in Go DeepCopy
+
+*   **Status:** Resolved (Verified)
+*   **Severity:** High
+*   **Description:**
+    In `go/protocol/deepcopy.go`, `DeepCopy` iterates based on vector length without validating the underlying buffer size or checking for integer overflow/excessive size.
+*   **My Judgment:**
+    Added sanity checks (`l < 0 || l > math.MaxInt32`) to DeepCopy vector iterations to prevent integer overflow and excessive memory allocation.
