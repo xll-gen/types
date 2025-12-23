@@ -2,6 +2,7 @@ package protocol
 
 import (
 	flatbuffers "github.com/google/flatbuffers/go"
+	"math"
 )
 
 // Clone creates a deep copy of the Scalar.
@@ -110,6 +111,9 @@ func (rcv *Err) DeepCopy(b *flatbuffers.Builder) flatbuffers.UOffsetT {
 
 func (rcv *AsyncHandle) DeepCopy(b *flatbuffers.Builder) flatbuffers.UOffsetT {
 	l := rcv.ValLength()
+	if l > math.MaxInt32 {
+		return 0
+	}
 	AsyncHandleStartValVector(b, l)
 	for i := l - 1; i >= 0; i-- {
 		b.PrependByte(rcv.Val(i))
@@ -146,6 +150,9 @@ func (rcv *Grid) DeepCopy(b *flatbuffers.Builder) flatbuffers.UOffsetT {
 	}
 
 	l := rcv.DataLength()
+	if l > math.MaxInt32 {
+		return 0
+	}
 	offsets := make([]flatbuffers.UOffsetT, l)
 	s := new(Scalar)
 	for i := 0; i < l; i++ {
@@ -188,6 +195,9 @@ func (rcv *NumGrid) DeepCopy(b *flatbuffers.Builder) flatbuffers.UOffsetT {
 	}
 
 	l := rcv.DataLength()
+	if l > math.MaxInt32 {
+		return 0
+	}
 	NumGridStartDataVector(b, l)
 	for i := l - 1; i >= 0; i-- {
 		b.PrependFloat64(rcv.Data(i))
@@ -236,6 +246,9 @@ func (rcv *Range) DeepCopy(b *flatbuffers.Builder) flatbuffers.UOffsetT {
 
 	// Refs Vector of Structs
 	l := rcv.RefsLength()
+	if l > math.MaxInt32 {
+		return 0
+	}
 	RangeStartRefsVector(b, l)
 	r := new(Rect)
 	for i := l - 1; i >= 0; i-- {
