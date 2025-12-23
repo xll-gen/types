@@ -150,9 +150,10 @@ func (rcv *Grid) DeepCopy(b *flatbuffers.Builder) flatbuffers.UOffsetT {
 	}
 
 	l := rcv.DataLength()
-	if l > math.MaxInt32 {
+	if l < 0 || l > math.MaxInt32 {
 		return 0
 	}
+
 	offsets := make([]flatbuffers.UOffsetT, l)
 	s := new(Scalar)
 	for i := 0; i < l; i++ {
@@ -195,9 +196,10 @@ func (rcv *NumGrid) DeepCopy(b *flatbuffers.Builder) flatbuffers.UOffsetT {
 	}
 
 	l := rcv.DataLength()
-	if l > math.MaxInt32 {
+	if l < 0 || l > math.MaxInt32 {
 		return 0
 	}
+
 	NumGridStartDataVector(b, l)
 	for i := l - 1; i >= 0; i-- {
 		b.PrependFloat64(rcv.Data(i))
@@ -246,9 +248,10 @@ func (rcv *Range) DeepCopy(b *flatbuffers.Builder) flatbuffers.UOffsetT {
 
 	// Refs Vector of Structs
 	l := rcv.RefsLength()
-	if l > math.MaxInt32 {
+	if l < 0 || l > math.MaxInt32 {
 		return 0
 	}
+
 	RangeStartRefsVector(b, l)
 	r := new(Rect)
 	for i := l - 1; i >= 0; i-- {

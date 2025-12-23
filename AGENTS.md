@@ -93,3 +93,4 @@ When adding support for a new type in `protocol.fbs`:
 *   **Formatting**: Follow standard Go and C++ formatting guidelines.
 *   **Testing**: Ensure changes are verified. Since this is a library, unit tests (if added) should cover type conversions.
 *   **Workflow**: Before committing, fetch the latest state of the parent branch and merge it into your working branch.
+*   **Documentation**: Before writing to documents in the `.jules` directory, check the current date and ensure it is included in the entry.
