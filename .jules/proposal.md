@@ -33,3 +33,13 @@
 **Description:** `AnyToXLOPER12` currently does not handle `RefCache` and `AsyncHandle` types, defaulting to `xltypeNil`.
 **Impact:** Potential data loss or incorrect behavior if these types are returned to Excel.
 **Plan:** Determine appropriate mapping (e.g., `xltypeBigData` or string representation) and implement.
+
+## 7. Safety Hardening for C++ Converters
+**Status:** In Progress
+**Description:** `ConvertGrid`, `ConvertNumGrid`, and `ConvertScalar` lack internal exception handling. If memory allocation fails (e.g., `std::bad_alloc` during `vector::reserve` or `builder::CreateString`), the exception propagates, potentially crashing the host application (Excel).
+**Plan:** Wrap these function bodies in `try-catch` blocks and return a safe "empty" or "error" FlatBuffer offset on failure.
+
+## 8. Safety Hardening for Go DeepCopy
+**Status:** In Progress
+**Description:** Generated `DeepCopy` methods (e.g., for `Grid`, `NumGrid`) allocate memory based on the input `DataLength` field without validation. A malicious or malformed payload with a large length field could cause an Out-Of-Memory (OOM) panic (DoS).
+**Plan:** Add validation checks in `DeepCopy` methods to ensure `DataLength` is within reasonable limits (e.g., `math.MaxInt32`) before allocation.

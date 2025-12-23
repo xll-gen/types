@@ -9,16 +9,6 @@
 #include <new>
 #include <cstring> // for std::memset
 
-namespace {
-// Helper to map Excel error codes (0-255) to Protocol error codes (2000+)
-// If the error code is already >= 2000, it is preserved.
-protocol::XlError ToProtocolError(int xlerr) {
-    if (xlerr >= 0 && xlerr < 2000) {
-        return (protocol::XlError)(xlerr + 2000);
-    }
-    return (protocol::XlError)xlerr;
-}
-} // namespace
 
 // Excel -> FlatBuffers Converters
 
@@ -32,100 +22,116 @@ static protocol::XlError ExcelErrorToProtocol(int err) {
 }
 
 flatbuffers::Offset<protocol::Scalar> ConvertScalar(const XLOPER12& cell, flatbuffers::FlatBufferBuilder& builder) {
-    if (cell.xltype == xltypeNum) {
-        return protocol::CreateScalar(builder, protocol::ScalarValue::Num, protocol::CreateNum(builder, cell.val.num).Union());
-    } else if (cell.xltype == xltypeInt) {
-        return protocol::CreateScalar(builder, protocol::ScalarValue::Int, protocol::CreateInt(builder, cell.val.w).Union());
-    } else if (cell.xltype == xltypeBool) {
-        return protocol::CreateScalar(builder, protocol::ScalarValue::Bool, protocol::CreateBool(builder, cell.val.xbool).Union());
-    } else if (cell.xltype == xltypeStr) {
-         return protocol::CreateScalar(builder, protocol::ScalarValue::Str, protocol::CreateStr(builder, builder.CreateString(ConvertExcelString(cell.val.str))).Union());
-    } else if (cell.xltype == xltypeErr) {
-         return protocol::CreateScalar(builder, protocol::ScalarValue::Err, protocol::CreateErr(builder, ExcelErrorToProtocol(cell.val.err)).Union());
-    } else {
-         return protocol::CreateScalar(builder, protocol::ScalarValue::Nil, protocol::CreateNil(builder).Union());
+    try {
+        if (cell.xltype == xltypeNum) {
+            return protocol::CreateScalar(builder, protocol::ScalarValue::Num, protocol::CreateNum(builder, cell.val.num).Union());
+        } else if (cell.xltype == xltypeInt) {
+            return protocol::CreateScalar(builder, protocol::ScalarValue::Int, protocol::CreateInt(builder, cell.val.w).Union());
+        } else if (cell.xltype == xltypeBool) {
+            return protocol::CreateScalar(builder, protocol::ScalarValue::Bool, protocol::CreateBool(builder, cell.val.xbool).Union());
+        } else if (cell.xltype == xltypeStr) {
+            return protocol::CreateScalar(builder, protocol::ScalarValue::Str, protocol::CreateStr(builder, builder.CreateString(ConvertExcelString(cell.val.str))).Union());
+        } else if (cell.xltype == xltypeErr) {
+            return protocol::CreateScalar(builder, protocol::ScalarValue::Err, protocol::CreateErr(builder, ExcelErrorToProtocol(cell.val.err)).Union());
+        } else {
+            return protocol::CreateScalar(builder, protocol::ScalarValue::Nil, protocol::CreateNil(builder).Union());
+        }
+    } catch (...) {
+        return protocol::CreateScalar(builder, protocol::ScalarValue::Nil, protocol::CreateNil(builder).Union());
     }
 }
 
 flatbuffers::Offset<protocol::Grid> ConvertGrid(LPXLOPER12 op, flatbuffers::FlatBufferBuilder& builder) {
-    if (op->xltype == xltypeMulti) {
-        int rows = op->val.array.rows;
-        int cols = op->val.array.columns;
-        size_t count = (size_t)rows * cols;
+    try {
+        if (op->xltype == xltypeMulti) {
+            int rows = op->val.array.rows;
+            int cols = op->val.array.columns;
+            size_t count = (size_t)rows * cols;
 
-        if (rows < 0 || cols < 0 || count > (size_t)std::numeric_limits<int>::max()) {
-             // Return empty grid on overflow or invalid dimensions
-             return protocol::CreateGrid(builder, 0, 0, 0);
+            if (rows < 0 || cols < 0 || count > (size_t)std::numeric_limits<int>::max()) {
+                // Return empty grid on overflow or invalid dimensions
+                return protocol::CreateGrid(builder, 0, 0, 0);
+            }
+
+            // Safety check: if grid dimensions are non-zero, lparray must not be null
+            if (count > 0 && !op->val.array.lparray) {
+                return protocol::CreateGrid(builder, 0, 0, 0);
+            }
+
+            std::vector<flatbuffers::Offset<protocol::Scalar>> elements;
+            elements.reserve(count);
+
+            for (size_t i = 0; i < count; ++i) {
+                elements.push_back(ConvertScalar(op->val.array.lparray[i], builder));
+            }
+
+            auto vec = builder.CreateVector(elements);
+            return protocol::CreateGrid(builder, (uint32_t)rows, (uint32_t)cols, vec);
         }
 
-        // Safety check: if grid dimensions are non-zero, lparray must not be null
-        if (count > 0 && !op->val.array.lparray) {
-             return protocol::CreateGrid(builder, 0, 0, 0);
-        }
-
+        // Handle scalar as 1x1 Grid
         std::vector<flatbuffers::Offset<protocol::Scalar>> elements;
-        elements.reserve(count);
-
-        for (size_t i = 0; i < count; ++i) {
-            elements.push_back(ConvertScalar(op->val.array.lparray[i], builder));
-        }
+        elements.push_back(ConvertScalar(*op, builder));
 
         auto vec = builder.CreateVector(elements);
-        return protocol::CreateGrid(builder, (uint32_t)rows, (uint32_t)cols, vec);
+        return protocol::CreateGrid(builder, 1, 1, vec);
+    } catch (...) {
+        return protocol::CreateGrid(builder, 0, 0, 0);
     }
-
-    // Handle scalar as 1x1 Grid
-    std::vector<flatbuffers::Offset<protocol::Scalar>> elements;
-    elements.push_back(ConvertScalar(*op, builder));
-
-    auto vec = builder.CreateVector(elements);
-    return protocol::CreateGrid(builder, 1, 1, vec);
 }
 
 flatbuffers::Offset<protocol::NumGrid> ConvertNumGrid(FP12* fp, flatbuffers::FlatBufferBuilder& builder) {
-    if (!fp) return protocol::CreateNumGrid(builder, 0, 0, 0);
-    int rows = fp->rows;
-    int cols = fp->columns;
-    size_t count = (size_t)rows * cols;
+    try {
+        if (!fp) return protocol::CreateNumGrid(builder, 0, 0, 0);
+        int rows = fp->rows;
+        int cols = fp->columns;
+        size_t count = (size_t)rows * cols;
 
-    if (rows < 0 || cols < 0 || count > (size_t)std::numeric_limits<int>::max()) {
+        if (rows < 0 || cols < 0 || count > (size_t)std::numeric_limits<int>::max()) {
+            return protocol::CreateNumGrid(builder, 0, 0, 0);
+        }
+
+        // Safety check for vector allocation size (though FlatBuffers handles it, explicit check prevents huge alloc attempts)
+        if (count > SIZE_MAX / sizeof(double)) {
+            return protocol::CreateNumGrid(builder, 0, 0, 0);
+        }
+
+        // FP12 array is double[]
+        auto vec = builder.CreateVector(fp->array, count);
+        return protocol::CreateNumGrid(builder, (uint32_t)rows, (uint32_t)cols, vec);
+    } catch (...) {
         return protocol::CreateNumGrid(builder, 0, 0, 0);
     }
-
-    // Safety check for vector allocation size (though FlatBuffers handles it, explicit check prevents huge alloc attempts)
-    if (count > SIZE_MAX / sizeof(double)) {
-         return protocol::CreateNumGrid(builder, 0, 0, 0);
-    }
-
-    // FP12 array is double[]
-    auto vec = builder.CreateVector(fp->array, count);
-    return protocol::CreateNumGrid(builder, (uint32_t)rows, (uint32_t)cols, vec);
 }
 
 flatbuffers::Offset<protocol::Range> ConvertRange(LPXLOPER12 op, flatbuffers::FlatBufferBuilder& builder, const std::string& format) {
-    auto fmtOff = builder.CreateString(format);
+    try {
+        auto fmtOff = builder.CreateString(format);
 
-    if (op->xltype & xltypeRef) {
-         std::vector<protocol::Rect> rects;
-         int count = op->val.mref.lpmref->count;
-         for(int i=0; i<count; ++i) {
-             auto& r = op->val.mref.lpmref->reftbl[i];
-             rects.emplace_back(r.rwFirst, r.rwLast, r.colFirst, r.colLast);
-         }
-         auto vec = builder.CreateVectorOfStructs(rects);
+        if (op->xltype & xltypeRef) {
+            std::vector<protocol::Rect> rects;
+            int count = op->val.mref.lpmref->count;
+            for(int i=0; i<count; ++i) {
+                auto& r = op->val.mref.lpmref->reftbl[i];
+                rects.emplace_back(r.rwFirst, r.rwLast, r.colFirst, r.colLast);
+            }
+            auto vec = builder.CreateVectorOfStructs(rects);
 
-         return protocol::CreateRange(builder, 0, vec, fmtOff);
+            return protocol::CreateRange(builder, 0, vec, fmtOff);
+        }
+        // SRRef
+        if (op->xltype & xltypeSRef) {
+            std::vector<protocol::Rect> rects;
+            auto& r = op->val.sref.ref;
+            rects.emplace_back(r.rwFirst, r.rwLast, r.colFirst, r.colLast);
+            auto vec = builder.CreateVectorOfStructs(rects);
+            return protocol::CreateRange(builder, 0, vec, fmtOff);
+        }
+
+        return protocol::CreateRange(builder, 0, 0, fmtOff);
+    } catch (...) {
+        return protocol::CreateRange(builder, 0, 0, 0);
     }
-    // SRRef
-    if (op->xltype & xltypeSRef) {
-         std::vector<protocol::Rect> rects;
-         auto& r = op->val.sref.ref;
-         rects.emplace_back(r.rwFirst, r.rwLast, r.colFirst, r.colLast);
-         auto vec = builder.CreateVectorOfStructs(rects);
-         return protocol::CreateRange(builder, 0, vec, fmtOff);
-    }
-
-    return protocol::CreateRange(builder, 0, 0, fmtOff);
 }
 
 // Helper for converting Multi to Any
@@ -156,10 +162,13 @@ flatbuffers::Offset<protocol::Any> ConvertMultiToAny(const XLOPER12& op, flatbuf
 
         if (allNums) {
             // Create NumGrid
-            std::vector<double> nums;
-            nums.reserve(count);
-            for (size_t i = 0; i < count; ++i) nums.push_back(op.val.array.lparray[i].val.num);
-            auto vec = builder.CreateVector(nums);
+            // Optimization: Use CreateUninitializedVector to write directly to FlatBuffer memory,
+            // avoiding intermediate std::vector allocation and redundant copy.
+            double* buf = nullptr;
+            auto vec = builder.CreateUninitializedVector<double>(count, &buf);
+            for (size_t i = 0; i < count; ++i) {
+                buf[i] = op.val.array.lparray[i].val.num;
+            }
             auto ng = protocol::CreateNumGrid(builder, op.val.array.rows, op.val.array.columns, vec);
             return protocol::CreateAny(builder, protocol::AnyValue::NumGrid, ng.Union());
         } else {
@@ -334,9 +343,6 @@ LPXLOPER12 RangeToXLOPER12(const protocol::Range* range) {
 
         // Guard against leaks if new throws
         ScopeGuard guard([&]() {
-            if (op->val.mref.lpmref) {
-                delete[] (char*)op->val.mref.lpmref;
-            }
             ReleaseXLOPER12(op);
         });
 
@@ -469,32 +475,50 @@ LPXLOPER12 GridToXLOPER12(const protocol::Grid* grid) {
                         int utf8Len = static_cast<int>(realLen);
 
                         // CP_UTF8 = 65001
-                        int needed = MultiByteToWideChar(65001, 0, utf8, utf8Len, NULL, 0);
+                        // Optimization: Try to convert using a stack buffer first to avoid double API call.
+                        // Most Excel strings are small.
+                        XCHAR stackBuf[256];
+                        int needed = 0;
 
-                        // Safety check: Don't allocate huge memory for strings.
-                        if (needed < 0 || needed > 10000000 || (size_t)needed > SIZE_MAX / sizeof(XCHAR) - 2) {
-                            cell.val.str = new XCHAR[2];
-                            cell.val.str[0] = 0;
-                            cell.val.str[1] = 0;
+                        if (utf8Len < 256) {
+                            needed = MultiByteToWideChar(65001, 0, utf8, utf8Len, stackBuf, 256);
+                        }
+
+                        if (needed > 0) {
+                            // Successful conversion to stack buffer
+                            cell.val.str = new XCHAR[needed + 2];
+                            std::memcpy(cell.val.str + 1, stackBuf, needed * sizeof(XCHAR));
+                            cell.val.str[0] = (XCHAR)needed;
+                            cell.val.str[needed + 1] = 0;
                         } else {
-                            if (needed > 32767) {
-                                XCHAR* temp = new XCHAR[needed + 2];
-                                MultiByteToWideChar(65001, 0, utf8, utf8Len, temp + 1, needed);
+                            // Fallback to double-call (or string too long for stack buffer)
+                            needed = MultiByteToWideChar(65001, 0, utf8, utf8Len, NULL, 0);
 
-                                cell.val.str = new XCHAR[32767 + 2];
-                                std::memcpy(cell.val.str + 1, temp + 1, 32767 * sizeof(XCHAR));
-
-                                delete[] temp;
-
-                                cell.val.str[0] = 32767;
-                                cell.val.str[32767 + 1] = 0;
+                            // Safety check: Don't allocate huge memory for strings.
+                            if (needed < 0 || needed > 10000000 || (size_t)needed > SIZE_MAX / sizeof(XCHAR) - 2) {
+                                cell.val.str = new XCHAR[2];
+                                cell.val.str[0] = 0;
+                                cell.val.str[1] = 0;
                             } else {
-                                cell.val.str = new XCHAR[needed + 2];
-                                if (needed > 0) {
-                                    MultiByteToWideChar(65001, 0, utf8, utf8Len, cell.val.str + 1, needed);
+                                if (needed > 32767) {
+                                    XCHAR* temp = new XCHAR[needed + 2];
+                                    MultiByteToWideChar(65001, 0, utf8, utf8Len, temp + 1, needed);
+
+                                    cell.val.str = new XCHAR[32767 + 2];
+                                    std::memcpy(cell.val.str + 1, temp + 1, 32767 * sizeof(XCHAR));
+
+                                    delete[] temp;
+
+                                    cell.val.str[0] = 32767;
+                                    cell.val.str[32767 + 1] = 0;
+                                } else {
+                                    cell.val.str = new XCHAR[needed + 2];
+                                    if (needed > 0) {
+                                        MultiByteToWideChar(65001, 0, utf8, utf8Len, cell.val.str + 1, needed);
+                                    }
+                                    cell.val.str[0] = (XCHAR)needed;
+                                    cell.val.str[needed + 1] = 0;
                                 }
-                                cell.val.str[0] = (XCHAR)needed;
-                                cell.val.str[needed + 1] = 0;
                             }
                         }
                     }
