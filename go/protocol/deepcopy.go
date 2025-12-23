@@ -121,11 +121,7 @@ func (rcv *AsyncHandle) DeepCopy(b *flatbuffers.Builder) flatbuffers.UOffsetT {
 		return 0
 	}
 
-	AsyncHandleStartValVector(b, l)
-	for i := l - 1; i >= 0; i-- {
-		b.PrependByte(rcv.Val(i))
-	}
-	vec := b.EndVector(l)
+	vec := b.CreateByteVector(rcv.ValBytes())
 	AsyncHandleStart(b)
 	AsyncHandleAddVal(b, vec)
 	return AsyncHandleEnd(b)

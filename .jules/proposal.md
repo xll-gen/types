@@ -18,7 +18,7 @@
 **Plan:** Implement `GetXllDir` using `/proc/self/exe` (Linux) or `dladdr` to find the shared library or executable path.
 
 ## 4. Optimize Go DeepCopy for Byte Vectors
-**Status:** Proposed
+**Status:** In Progress
 **Description:** In `go/protocol/deepcopy.go`, `AsyncHandle` (and potentially other future byte vectors) are copied byte-by-byte in a loop.
 **Impact:** Inefficient for large data.
 **Plan:** Use `CreateByteVector` (if available in generated bindings) or `CreateByteVector` logic to copy slices directly.
@@ -35,11 +35,26 @@
 **Plan:** Determine appropriate mapping (e.g., `xltypeBigData` or string representation) and implement.
 
 ## 7. Safety Hardening for C++ Converters
-**Status:** In Progress
+**Status:** Completed
 **Description:** `ConvertGrid`, `ConvertNumGrid`, and `ConvertScalar` lack internal exception handling. If memory allocation fails (e.g., `std::bad_alloc` during `vector::reserve` or `builder::CreateString`), the exception propagates, potentially crashing the host application (Excel).
-**Plan:** Wrap these function bodies in `try-catch` blocks and return a safe "empty" or "error" FlatBuffer offset on failure.
+**Action:** Verified that function bodies are wrapped in `try-catch` blocks in `src/converters.cpp` (implemented in previous commits).
 
 ## 8. Safety Hardening for Go DeepCopy
-**Status:** In Progress
+**Status:** Completed
 **Description:** Generated `DeepCopy` methods (e.g., for `Grid`, `NumGrid`) allocate memory based on the input `DataLength` field without validation. A malicious or malformed payload with a large length field could cause an Out-Of-Memory (OOM) panic (DoS).
-**Plan:** Add validation checks in `DeepCopy` methods to ensure `DataLength` is within reasonable limits (e.g., `math.MaxInt32`) before allocation.
+**Action:** Verified that validation checks are present in `DeepCopy` methods in `go/protocol/deepcopy.go` (implemented in previous commits).
+
+## 9. Fix `WideToUtf8` Integer Overflow
+**Status:** Completed
+**Description:** `WideToUtf8` in `src/utility.cpp` casts `wstring::size` (size_t) to `int` without checking for overflow. If the string is larger than 2GB, this causes undefined behavior or crashes.
+**Result:** Added a check to throw `std::runtime_error` if `wstr.size() > INT_MAX`.
+
+## 10. Optimize `DeepCopy` for `AsyncHandle`
+**Status:** Completed
+**Description:** `AsyncHandle` deep copy currently iterates byte-by-byte.
+**Result:** Updated `go/protocol/deepcopy.go` to use `builder.CreateByteVector(rcv.ValBytes())`, replacing the manual byte-by-byte loop.
+
+## 11. Remove Unused `PascalStringToCString`
+**Status:** Proposed
+**Description:** `PascalStringToCString` in `src/PascalString.cpp` is unused and seemingly incorrect (casts `unsigned short` to `char`).
+**Plan:** Remove the function and its declaration.

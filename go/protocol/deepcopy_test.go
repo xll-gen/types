@@ -1,8 +1,10 @@
 package protocol
 
 import (
-	flatbuffers "github.com/google/flatbuffers/go"
+	"bytes"
 	"testing"
+
+	flatbuffers "github.com/google/flatbuffers/go"
 )
 
 func TestScalar_Clone(t *testing.T) {
@@ -198,5 +200,45 @@ func TestAny_Clone(t *testing.T) {
 	}
 	if string(r.SheetName()) != "Sheet1" {
 		t.Error("Sheet name mismatch")
+	}
+}
+
+func TestAsyncHandle_DeepCopy(t *testing.T) {
+	t.Parallel()
+	b := flatbuffers.NewBuilder(0)
+
+	// Create a byte vector [1, 2, 3, 4, 5]
+	payload := []byte{1, 2, 3, 4, 5}
+	vec := b.CreateByteVector(payload)
+
+	AsyncHandleStart(b)
+	AsyncHandleAddVal(b, vec)
+	ahOff := AsyncHandleEnd(b)
+
+	// Wrap in Scalar for full deep copy path
+	ScalarStart(b)
+	ScalarAddValType(b, ScalarValueAsyncHandle)
+	ScalarAddVal(b, ahOff)
+	b.Finish(ScalarEnd(b))
+
+	orig := GetRootAsScalar(b.FinishedBytes(), 0)
+	clone := orig.Clone()
+
+	if clone.ValType() != ScalarValueAsyncHandle {
+		t.Fatalf("Expected ScalarValueAsyncHandle, got %v", clone.ValType())
+	}
+
+	var ah AsyncHandle
+	if !clone.Val(&ah._tab) {
+		t.Fatal("Failed to get AsyncHandle from clone")
+	}
+
+	if ah.ValLength() != len(payload) {
+		t.Errorf("Expected length %d, got %d", len(payload), ah.ValLength())
+	}
+
+	gotBytes := ah.ValBytes()
+	if !bytes.Equal(gotBytes, payload) {
+		t.Errorf("Expected bytes %v, got %v", payload, gotBytes)
 	}
 }
