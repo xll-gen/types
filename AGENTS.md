@@ -59,6 +59,10 @@ This project uses [Task](https://taskfile.dev/) for build automation.
 
 *   **CommandWrapper**: The `CommandWrapper` table is used in `protocol.fbs` because FlatBuffers Go bindings do not currently support vectors of Unions (e.g., `[Command]`). The wrapper allows us to use `[CommandWrapper]` instead.
 
+## Documentation Standards
+
+*   **Timestamps**: When creating or updating documentation in the `.jules/` directory (e.g., bug tracker, sentinel logs), always fetch the current date (e.g., via `date` command) and use it to timestamp your entries. This ensures accurate tracking of when issues or changes were recorded.
+
 ## Co-Change Clusters
 
 Certain parts of the codebase are tightly coupled and must be updated together to preserve consistency.
