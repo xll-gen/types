@@ -188,12 +188,12 @@
 
 ## 16. Unsafe API Exposure (`ConvertGrid`)
 
-*   **Status:** Open
+*   **Status:** Resolved (Verified)
 *   **Severity:** Medium
 *   **Description:**
-    `ConvertGrid` in `src/converters.cpp` allocates memory based on input dimensions without a `try-catch` block. Malicious inputs can trigger `std::bad_alloc` and crash the host application.
+    `ConvertGrid` in `include/types/converters.h` is a public API that allocates memory based on input dimensions (`reserve`). It previously lacked a `try-catch` block.
 *   **My Judgment:**
-    Public APIs expected to be called by host applications should catch internal exceptions to prevent crashing the process. This function should be wrapped in `try-catch` and return a safe error value.
+    Wrapped `ConvertGrid` and other top-level converters in `try-catch` blocks to safely handle `std::bad_alloc` and other exceptions, preventing host crashes.
 
 ## 17. Memory Leak in `AnyToXLOPER12` (NumGrid)
 
@@ -213,4 +213,13 @@
     1. Runtime Panic (Index out of range) -> Service Crash.
     2. Memory Exhaustion (DoS) due to huge `Make` calls based on `Length`.
 *   **My Judgment:**
-    This is a high-severity security vulnerability. A remote attacker could crash the Go service or exhaust its memory by sending a small packet with a large `Length` field. Validation logic must be added to `DeepCopy` or the accessor methods to ensure `Length` is backed by actual data and within safe limits.
+    Verified as present in the latest codebase. User decided to log only. No fix applied.
+
+## 18. DoS and Panic in Go DeepCopy
+
+*   **Status:** Resolved (Verified)
+*   **Severity:** High
+*   **Description:**
+    In `go/protocol/deepcopy.go`, `DeepCopy` iterates based on vector length without validating the underlying buffer size or checking for integer overflow/excessive size.
+*   **My Judgment:**
+    Added sanity checks (`l < 0 || l > math.MaxInt32`) to DeepCopy vector iterations to prevent integer overflow and excessive memory allocation.
