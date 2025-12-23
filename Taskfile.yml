@@ -1,7 +1,7 @@
 version: '3'
 
 vars:
-  PRESET: '{{.PRESET | default "default"}}'
+  PRESET: '{{if .PRESET}}{{.PRESET}}{{else if or (eq .OS "windows") (eq .OS "Windows_NT")}}windows-mingw{{else}}default{{end}}'
 
 tasks:
   default:
@@ -33,4 +33,4 @@ tasks:
   clean:
     desc: Clean build directory
     cmds:
-      - rm -rf build
+      - cmake -E remove_directory build
