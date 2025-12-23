@@ -17,3 +17,7 @@
 ## 2024-05-25 - FlatBuffers Vector Creation
 **Learning:** `builder.CreateVector(std::vector)` incurs double allocation (std::vector + FlatBuffer) and double copy. Using `CreateUninitializedVector` allows writing directly to the FlatBuffer memory.
 **Action:** When populating FlatBuffer vectors from non-contiguous sources (where `memcpy` isn't possible), use `CreateUninitializedVector` and fill the buffer in a loop to save one allocation and one copy pass.
+
+## 2024-10-24 - [Optimization] GridToXLOPER12 Small String Conversion
+**Learning:** `MultiByteToWideChar` is typically called twice (size query + conversion). For small strings (common in Excel cells), a stack buffer can serve as the destination for the first attempt, often eliminating the second call entirely.
+**Action:** Use a "speculative" stack buffer (e.g. 256 chars) for `MultiByteToWideChar`. If it succeeds, copy to the final heap buffer. If not, fallback to the two-pass approach.

@@ -469,32 +469,50 @@ LPXLOPER12 GridToXLOPER12(const protocol::Grid* grid) {
                         int utf8Len = static_cast<int>(realLen);
 
                         // CP_UTF8 = 65001
-                        int needed = MultiByteToWideChar(65001, 0, utf8, utf8Len, NULL, 0);
+                        // Optimization: Try to convert using a stack buffer first to avoid double API call.
+                        // Most Excel strings are small.
+                        XCHAR stackBuf[256];
+                        int needed = 0;
 
-                        // Safety check: Don't allocate huge memory for strings.
-                        if (needed < 0 || needed > 10000000 || (size_t)needed > SIZE_MAX / sizeof(XCHAR) - 2) {
-                            cell.val.str = new XCHAR[2];
-                            cell.val.str[0] = 0;
-                            cell.val.str[1] = 0;
+                        if (utf8Len < 256) {
+                            needed = MultiByteToWideChar(65001, 0, utf8, utf8Len, stackBuf, 256);
+                        }
+
+                        if (needed > 0) {
+                            // Successful conversion to stack buffer
+                            cell.val.str = new XCHAR[needed + 2];
+                            std::memcpy(cell.val.str + 1, stackBuf, needed * sizeof(XCHAR));
+                            cell.val.str[0] = (XCHAR)needed;
+                            cell.val.str[needed + 1] = 0;
                         } else {
-                            if (needed > 32767) {
-                                XCHAR* temp = new XCHAR[needed + 2];
-                                MultiByteToWideChar(65001, 0, utf8, utf8Len, temp + 1, needed);
+                            // Fallback to double-call (or string too long for stack buffer)
+                            needed = MultiByteToWideChar(65001, 0, utf8, utf8Len, NULL, 0);
 
-                                cell.val.str = new XCHAR[32767 + 2];
-                                std::memcpy(cell.val.str + 1, temp + 1, 32767 * sizeof(XCHAR));
-
-                                delete[] temp;
-
-                                cell.val.str[0] = 32767;
-                                cell.val.str[32767 + 1] = 0;
+                            // Safety check: Don't allocate huge memory for strings.
+                            if (needed < 0 || needed > 10000000 || (size_t)needed > SIZE_MAX / sizeof(XCHAR) - 2) {
+                                cell.val.str = new XCHAR[2];
+                                cell.val.str[0] = 0;
+                                cell.val.str[1] = 0;
                             } else {
-                                cell.val.str = new XCHAR[needed + 2];
-                                if (needed > 0) {
-                                    MultiByteToWideChar(65001, 0, utf8, utf8Len, cell.val.str + 1, needed);
+                                if (needed > 32767) {
+                                    XCHAR* temp = new XCHAR[needed + 2];
+                                    MultiByteToWideChar(65001, 0, utf8, utf8Len, temp + 1, needed);
+
+                                    cell.val.str = new XCHAR[32767 + 2];
+                                    std::memcpy(cell.val.str + 1, temp + 1, 32767 * sizeof(XCHAR));
+
+                                    delete[] temp;
+
+                                    cell.val.str[0] = 32767;
+                                    cell.val.str[32767 + 1] = 0;
+                                } else {
+                                    cell.val.str = new XCHAR[needed + 2];
+                                    if (needed > 0) {
+                                        MultiByteToWideChar(65001, 0, utf8, utf8Len, cell.val.str + 1, needed);
+                                    }
+                                    cell.val.str[0] = (XCHAR)needed;
+                                    cell.val.str[needed + 1] = 0;
                                 }
-                                cell.val.str[0] = (XCHAR)needed;
-                                cell.val.str[needed + 1] = 0;
                             }
                         }
                     }
