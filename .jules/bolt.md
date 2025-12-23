@@ -13,3 +13,7 @@
 ## 2024-05-24 - Excel String Conversion Optimization
 **Learning:** Intermediate `std::wstring` allocations in string conversion helpers (like `ConvertExcelString`) add significant overhead (malloc + copy) for high-frequency operations.
 **Action:** Use platform APIs (like `WideCharToMultiByte`) directly on the source buffer when possible to eliminate intermediate objects.
+
+## 2024-05-25 - FlatBuffers Vector Creation
+**Learning:** `builder.CreateVector(std::vector)` incurs double allocation (std::vector + FlatBuffer) and double copy. Using `CreateUninitializedVector` allows writing directly to the FlatBuffer memory.
+**Action:** When populating FlatBuffer vectors from non-contiguous sources (where `memcpy` isn't possible), use `CreateUninitializedVector` and fill the buffer in a loop to save one allocation and one copy pass.
