@@ -111,10 +111,9 @@ func (rcv *Err) DeepCopy(b *flatbuffers.Builder) flatbuffers.UOffsetT {
 
 func (rcv *AsyncHandle) DeepCopy(b *flatbuffers.Builder) flatbuffers.UOffsetT {
 	l := rcv.ValLength()
-	if l < 0 || l > math.MaxInt32 {
+	if l > math.MaxInt32 {
 		return 0
 	}
-
 	AsyncHandleStartValVector(b, l)
 	for i := l - 1; i >= 0; i-- {
 		b.PrependByte(rcv.Val(i))

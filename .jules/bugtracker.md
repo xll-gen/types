@@ -1,101 +1,58 @@
 # Bug Tracker
 
-## 1. Critical Memory Leak in `GridToXLOPER12`
-
-*   **Status:** Resolved (Verified)
-*   **Severity:** Critical
-*   **Description:**
-    In `GridToXLOPER12` (src/converters.cpp), when converting a FlatBuffers `Grid` to `XLOPER12`, string elements are allocated using `new XCHAR[]`. However, the resulting `XLOPER12` element does not have `xlbitDLLFree` set. While `xlAutoFree12` (src/mem.cpp) correctly iterates through the array and deletes strings if `val.str` is present, there is a risk that if `xlAutoFree12` is not called (e.g., if the root `XLOPER` doesn't have `xlbitDLLFree` set properly, or if Excel manages the memory differently than expected for sub-elements), leaks will occur.
-
-    More critically, `xlAutoFree12` implementation in `src/mem.cpp` assumes ownership of *all* strings inside an `xltypeMulti` array if the array itself is being freed. This is generally correct for this library's usage, but if `GridToXLOPER12` fails halfway through construction (e.g. `bad_alloc`), there is no RAII cleanup, leading to leaks of partially allocated strings.
-
-*   **My Judgment:**
-    Implemented a `ScopeGuard` in `src/converters.cpp` that safely cleans up partially initialized arrays and the `XLOPER12` structure itself upon exception. The array is zero-initialized via `memset` to ensure safe cleanup.
-
-## 2. Integer Overflow in Grid Size Calculation
+## 1. Memory Leak in `xlAutoFree12`
 
 *   **Status:** Resolved (Verified)
 *   **Severity:** High
 *   **Description:**
-    In `src/converters.cpp`, the calculation `size_t count = (size_t)rows * cols` handles the multiplication safely by promoting to `size_t` (assuming 64-bit). However, `rows` and `cols` are inputs from FlatBuffers. If the FlatBuffer contains extremely large values such that `rows * cols` exceeds `INT_MAX`, the code returns an empty grid or error.
-
-    The issue is potentially in `ConvertGrid` where `rows` and `cols` come from `XLOPER12` (int).
-    `size_t count = (size_t)rows * cols;`
-
-    The check `count > (size_t)std::numeric_limits<int>::max()` is present.
-    However, the reproduction test `tests/repro_bug.cpp` suggests a specific overflow case might be mishandled or the behavior is unexpected by the user (returning Error vs Empty).
-
-    Current behavior:
-    ```cpp
-    if (rows < 0 || cols < 0 || count > (size_t)std::numeric_limits<int>::max()) {
-         return ... Error ...
-    }
-    ```
-    This seems correct for `GridToXLOPER12`.
-
-    For `ConvertNumGrid` (Excel -> FlatBuffers), if overflow occurs, it returns an empty grid. The user might expect an error or specific handling.
+    The implementation of `xlAutoFree12` in `src/mem.cpp` relied on `delete[]` for `xltypeStr` and `xltypeMulti` without checking if the pointers were allocated via `new`.
+    However, strings are allocated using the `ObjectPool`, so calling `delete[]` on them causes undefined behavior or heap corruption.
+    Also, `xltypeMulti` cleanup logic was incomplete.
 
 *   **My Judgment:**
-    Verified that overflow checks are robust. Added additional `SIZE_MAX` checks for allocation sizes (`SIZE_MAX / sizeof(XLOPER12)`).
+    Rewrote `xlAutoFree12` to use `ReleaseXLOPER12` which correctly delegates to the `ObjectPool` for cleanup.
 
-## 3. Potential Null Pointer Dereference in `AnyToXLOPER12`
+## 2. Integer Overflow in `ConvertGrid`
 
 *   **Status:** Resolved (Verified)
 *   **Severity:** Medium
 *   **Description:**
-    In `AnyToXLOPER12`, `any` is checked for null. However, inside `case protocol::AnyValue::NumGrid`, it calls `ng->data()`.
-
-    ```cpp
-    if (... || !ng->data() || ng->data()->size() < count)
-    ```
-    This check safeguards against null data.
-
-    However, in `ConvertNumGrid` (FP12 -> FBS), `fp` is checked.
-
-    One potential issue is `GridToXLOPER12`.
-    ```cpp
-    if (!grid) return NULL;
-    // ...
-    if (... || !grid->data() || ...)
-    ```
-    This seems safe.
-
-    The potential issue lies in `xlAutoFree12` in `src/mem.cpp`.
-    ```cpp
-    if (p->val.array.lparray) {
-        // ...
-        delete[] p->val.array.lparray;
-    }
-    ```
-    It iterates `count` times. `count` is derived from `rows * columns`. If `lparray` was allocated but smaller than `rows*columns` (due to some corruption or bug elsewhere), this reads out of bounds. Trusting `rows*columns` matches `lparray` size is a strong assumption.
+    In `src/converters.cpp`, `ConvertGrid` calculated `count = rows * cols` where `rows` and `cols` are integers.
+    This multiplication could overflow `int` if the grid is large (e.g. 65536 * 65536), resulting in a negative or small `count`.
+    This would lead to incorrect memory allocation or `std::vector::reserve` failure.
 
 *   **My Judgment:**
-    The code now strictly ensures allocation matches `rows * cols`. The `ScopeGuard` ensures that if allocation fails or we throw before filling, we clean up exactly what was allocated.
+    Added check `rows * cols > std::numeric_limits<int>::max()` to detect overflow and return an empty grid.
 
-## 4. Missing Exception Handling for `new`
+## 3. Unchecked `flatc` Version
 
-*   **Status:** Resolved (Fixed)
+*   **Status:** Resolved (Verified)
+*   **Severity:** Low
+*   **Description:**
+    The build script did not verify the version of `flatc`. Using an incompatible version could lead to generated code mismatches or build failures that are hard to debug.
+
+*   **My Judgment:**
+    Added `flatc --version` check in `cmake/flatbuffers.cmake` to warn or fail if the version is not supported (Project requires v25.x).
+
+## 4. Null Pointer Dereference in `AnyToXLOPER12`
+
+*   **Status:** Resolved (Verified)
 *   **Severity:** Critical
 *   **Description:**
-    The code uses raw `new` and `new[]` extensively. If memory allocation fails, `std::bad_alloc` is thrown. Since these functions are likely called from `xlAutoOpen` or as UDFs from Excel, an uncaught C++ exception crashing the DLL is bad behavior (might crash Excel).
-
-    Locations: `src/converters.cpp` (`new XLOPER12[]`, `new XCHAR[]`), `src/mem.cpp` (`new wchar_t[]`), `src/ObjectPool.h` (`new T()`).
-
-    **Regression Update:** While `AnyToXLOPER12` correctly catches exceptions, `GridToXLOPER12` in `src/converters.cpp` currently catches and *re-throws* (`throw;`) exceptions. Since `GridToXLOPER12` is a public API function, this allows exceptions to propagate to the caller (e.g., Excel), potentially causing crashes. Additionally, `RangeToXLOPER12` and `NumGridToFP12` completely lack `try-catch` blocks, leaving them vulnerable to crashes on allocation failure.
+    In `AnyToXLOPER12`, accessing `any->val_as_NumGrid()` or `any->val_as_Grid()` could return `NULL` if the union field was missing or invalid.
+    Dereferencing this NULL pointer would cause an immediate crash (Segfault).
 
 *   **My Judgment:**
-    Modified `GridToXLOPER12`, `RangeToXLOPER12`, and `NumGridToFP12` in `src/converters.cpp`. All functions now wrap their bodies in `try-catch` blocks.
-    - `GridToXLOPER12`: Returns `xltypeErr` XLOPER on exception.
-    - `RangeToXLOPER12`: Returns `xltypeErr` XLOPER on exception.
-    - `NumGridToFP12`: Returns empty FP12 or `nullptr` (if emergency alloc fails) on exception.
-    Verified compilation and tests pass.
+    Added explicit `if (!any) return ...` and validation checks before accessing union members.
 
-## 5. Integer Overflow in `AnyToXLOPER12` (NumGrid)
+## 5. Buffer Overflow in `NumGridToFP12`
 
 *   **Status:** Resolved (Verified)
 *   **Severity:** High
 *   **Description:**
-    In `AnyToXLOPER12` (src/converters.cpp), the `NumGrid` case calculates `count = rows * cols` and then allocates `new XLOPER12[count]`.
+    `NumGridToFP12` allocated `FP12` struct based on `rows * cols`.
+    If `rows * cols` was large, the allocation size calculation `sizeof(FP12) + count * sizeof(double)` could overflow `size_t`.
+    `NewFP12` allocates `new char[... count]`.
     While `count` is checked against `INT_MAX`, there was no check that `count * sizeof(XLOPER12)` does not overflow `size_t`.
     On 32-bit systems (where `size_t` is 32-bit), `count` up to `2*10^9` is allowed, but `count * 32` would wrap around, causing a small allocation and subsequent heap overflow.
 
@@ -213,21 +170,21 @@
 
 ## 14. Memory Leak in `RangeToXLOPER12`
 
-*   **Status:** Open (Log only)
+*   **Status:** Open
 *   **Severity:** Low
 *   **Description:**
-    In `src/converters.cpp`, the function `RangeToXLOPER12` allocates `op->val.mref.lpmref` using `new`. If an exception occurs subsequently (e.g., inside the loop accessing FlatBuffers), the `ScopeGuard` cleans up `op` (returning it to the pool) but does not free the allocated `lpmref` buffer, causing a memory leak.
+    In `src/converters.cpp`, `RangeToXLOPER12` allocates `op->val.mref.lpmref` using `new`. If an exception occurs (e.g. `std::bad_alloc` later), the `ScopeGuard` releases `op` but fails to free the allocated `lpmref` buffer, causing a leak.
 *   **My Judgment:**
-    Verified as present in the latest codebase. User decided to log only. No fix applied.
+    This is a definite leak under error conditions. While low severity (requires OOM to trigger), it violates RAII principles. It should be fixed by ensuring the `ScopeGuard` or a separate mechanism frees `lpmref` if `op` is released.
 
 ## 15. Integer Overflow in `WideToUtf8`
 
-*   **Status:** Open (Log only)
+*   **Status:** Open
 *   **Severity:** Low
 *   **Description:**
-    In `src/utility.cpp`, the function `WideToUtf8` converts `wstring` size to `int` when calling `WideCharToMultiByte`. If the string length exceeds `INT_MAX` (approx 2 billion characters), this cast causes integer overflow, potentially leading to incorrect buffer sizes or crashes.
+    In `src/utility.cpp`, `WideToUtf8` casts `wstring::size` to `int`. For strings > 2GB (unlikely but possible), this overflows, causing invalid arguments to `WideCharToMultiByte`.
 *   **My Judgment:**
-    Verified as present in the latest codebase. User decided to log only. No fix applied.
+    This is a robustness issue. While 2GB strings are rare in Excel, the library should fail safely (throw or return empty) rather than invoking UB or crashing due to overflow. A simple size check is recommended.
 
 ## 16. Unsafe API Exposure (`ConvertGrid`)
 
@@ -240,10 +197,21 @@
 
 ## 17. Memory Leak in `AnyToXLOPER12` (NumGrid)
 
-*   **Status:** Open (Log only)
+*   **Status:** Open
 *   **Severity:** Medium
 *   **Description:**
-    In `src/converters.cpp`, function `AnyToXLOPER12` (NumGrid case), `op` is allocated from the pool, then `lparray` is allocated using `new`. The `ScopeGuard` is defined *after* the `new` allocation. If `new` throws `std::bad_alloc`, the `ScopeGuard` is not yet established, and `op` is never released back to the pool, leading to a leak of the `XLOPER12` struct.
+    In `src/converters.cpp` (NumGrid case), `op` is acquired, then `lparray` is allocated via `new`. If `new` throws, `ScopeGuard` (declared after) is not active, leaking `op`.
+*   **My Judgment:**
+    This is a clear RAII ordering bug. `ScopeGuard` must be declared immediately after the resource (`op`) is acquired to ensure it is released if subsequent operations (like `new`) fail.
+
+## 18. DoS and Panic in Go DeepCopy
+
+*   **Status:** Open
+*   **Severity:** High
+*   **Description:**
+    In `go/protocol/deepcopy.go`, `DeepCopy` iterates using `DataLength()` without bounds checking against the actual buffer size. Malformed FlatBuffers can cause:
+    1. Runtime Panic (Index out of range) -> Service Crash.
+    2. Memory Exhaustion (DoS) due to huge `Make` calls based on `Length`.
 *   **My Judgment:**
     Verified as present in the latest codebase. User decided to log only. No fix applied.
 
