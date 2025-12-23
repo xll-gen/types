@@ -111,7 +111,7 @@ func (rcv *Err) DeepCopy(b *flatbuffers.Builder) flatbuffers.UOffsetT {
 
 func (rcv *AsyncHandle) DeepCopy(b *flatbuffers.Builder) flatbuffers.UOffsetT {
 	l := rcv.ValLength()
-	if l < 0 || l > math.MaxInt32 {
+	if l > math.MaxInt32 {
 		return 0
 	}
 
