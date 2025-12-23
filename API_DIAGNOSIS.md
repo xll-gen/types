@@ -1,12 +1,12 @@
 # API 안전성 진단 및 개선 제안서
 
-본 문서는 `xll-gen/types` 리포지토리의 API 안전성 및 언어 간 불일치 사항을 진단하고, 이에 대한 개선 이력을 기록합니다.
+본 문서는 `xll-gen/types` 리포지토리의 API 안전성 현황과 언어 간 불일치를 진단하고, 구체적인 개선 방안을 제시합니다.
 
 ## 1. 진단 요약 (Executive Summary)
 
 C++ 구현체는 주요 메모리 및 호환성 제약을 준수하고 있으나, **일부 메모리 누수 시나리오**와 **정수 오버플로우** 취약점이 발견되었습니다. 또한, Go 구현체의 `DeepCopy` 로직에서 **DoS(Denial of Service) 위험**이 식별되었습니다. 지원 언어 간에는 일부 특수 타입(`AsyncHandle`, `RefCache`)의 처리 불일치가 존재합니다.
 
-## 2. 언어 및 프로토콜 간 불일치 (Inconsistencies)
+## 2. 상세 진단 (Detailed Diagnosis)
 
 ### 2.1 [Resolved] 에러 코드 매핑 불일치
 *   **현상**: `protocol.fbs`의 `XlError` 열거형은 `Null = 2000`으로 정의되어 있으나, Excel 표준 에러 코드는 `0`부터 시작합니다.
@@ -21,7 +21,10 @@ C++ 구현체는 주요 메모리 및 호환성 제약을 준수하고 있으나
 *   **현상**: Go는 길이 제한이 없으나 Excel은 32,767자 제한이 있습니다.
 *   **C++ 안전성**: 입력 변환 시 Truncation 및 길이 제한(200KB)을 통해 오버플로우를 방지하고 있습니다.
 
-## 3. 안전성 분석 (Safety Analysis)
+#### [Medium] C++: ConvertGrid 예외 전파 (AGENTS.md 위반)
+*   **위치**: `src/converters.cpp` (`ConvertGrid`)
+*   **현상**: `builder.CreateVector` 등에서 메모리 할당 실패 시 `std::bad_alloc` 예외가 그대로 외부(Excel 호스트)로 전파됩니다. 이는 "Top-level converters must wrap logic in try-catch" 가이드라인을 위반합니다.
+*   **위험**: 호스트 프로세스(Excel)의 비정상 종료를 유발할 수 있습니다.
 
 ### 3.1 C++ (`src/converters.cpp`, `src/utility.cpp`)
 *   **취약점 (Vulnerabilities)**:
@@ -35,7 +38,10 @@ C++ 구현체는 주요 메모리 및 호환성 제약을 준수하고 있으나
     1.  **[Critical] OOM / DoS Risk (`DeepCopy`)**: `DeepCopy` 메서드가 입력된 데이터 길이를 검증 없이 신뢰하여 메모리를 할당합니다. 조작된 패킷으로 대량의 메모리 할당을 유도하여 서비스를 거부 상태(DoS)로 만들 수 있습니다.
     2.  **[Low] Validation 미강제**: `Validate()` 함수가 존재하지만 데이터 처리 과정에서 호출이 강제되지 않습니다.
 
-## 4. 개선 이력 및 계획 (Action Plan)
+#### 미지원 타입 (Missing Types)
+*   **항목**: `AsyncHandle`, `RefCache`
+*   **Go**: 스키마 및 `DeepCopy`에서 지원.
+*   **C++**: `AnyToXLOPER12` 변환 시 해당 타입을 무시하고 `Nil`로 변환 (데이터 소실).
 
 ### 완료된 개선 (Completed)
 1.  **에러 코드 매핑 수정**: `src/converters.cpp` 수정 완료.
