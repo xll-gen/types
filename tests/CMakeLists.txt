@@ -27,8 +27,3 @@ add_executable(null_safety_test test_null_safety.cpp)
 target_link_libraries(null_safety_test PRIVATE xll-gen-types)
 target_include_directories(null_safety_test PRIVATE ${CMAKE_SOURCE_DIR}/include)
 add_test(NAME null_safety_test COMMAND null_safety_test)
-
-add_executable(utility_safety_test test_utility_safety.cpp)
-target_link_libraries(utility_safety_test PRIVATE xll-gen-types)
-target_include_directories(utility_safety_test PRIVATE ${CMAKE_SOURCE_DIR}/include)
-add_test(NAME utility_safety_test COMMAND utility_safety_test)

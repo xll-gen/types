@@ -334,6 +334,9 @@ LPXLOPER12 RangeToXLOPER12(const protocol::Range* range) {
 
         // Guard against leaks if new throws
         ScopeGuard guard([&]() {
+            if (op->val.mref.lpmref) {
+                delete[] (char*)op->val.mref.lpmref;
+            }
             ReleaseXLOPER12(op);
         });
 

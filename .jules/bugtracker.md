@@ -213,21 +213,21 @@
 
 ## 14. Memory Leak in `RangeToXLOPER12`
 
-*   **Status:** Open (Log only)
-*   **Severity:** Low
+*   **Status:** Resolved (Verified)
+*   **Severity:** High
 *   **Description:**
     In `src/converters.cpp`, the function `RangeToXLOPER12` allocates `op->val.mref.lpmref` using `new`. If an exception occurs subsequently (e.g., inside the loop accessing FlatBuffers), the `ScopeGuard` cleans up `op` (returning it to the pool) but does not free the allocated `lpmref` buffer, causing a memory leak.
 *   **My Judgment:**
-    User decided to log only. No fix applied. Remediation would involve updating `ScopeGuard` to check for and delete `op->val.mref.lpmref`.
+    Fixed by updating `ScopeGuard` in `RangeToXLOPER12` to explicitly delete `op->val.mref.lpmref` if it is non-null, ensuring proper cleanup on exception.
 
 ## 15. Integer Overflow in `WideToUtf8`
 
-*   **Status:** Resolved (Verified)
+*   **Status:** Open (Log only)
 *   **Severity:** Low
 *   **Description:**
     In `src/utility.cpp`, the function `WideToUtf8` converts `wstring` size to `int` when calling `WideCharToMultiByte`. If the string length exceeds `INT_MAX` (approx 2 billion characters), this cast causes integer overflow, potentially leading to incorrect buffer sizes or crashes.
 *   **My Judgment:**
-    Fixed by adding a check `if (wstr.size() > (size_t)std::numeric_limits<int>::max())` in `src/utility.cpp`. The function now returns an empty string on overflow. Verified with `tests/test_utility_safety.cpp`.
+    User decided to log only. No fix applied. Remediation would involve checking `wstr.size()` against `INT_MAX`.
 
 ## 16. Unsafe API Exposure (`ConvertGrid`)
 

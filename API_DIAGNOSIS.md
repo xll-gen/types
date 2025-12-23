@@ -40,10 +40,11 @@ C++ 구현체는 주요 메모리 및 호환성 제약을 준수하고 있으나
 ### 완료된 개선 (Completed)
 1.  **에러 코드 매핑 수정**: `src/converters.cpp` 수정 완료.
 2.  **GridToXLOPER12 안전성 강화**: `ScopeGuard` 개선 및 문자열 Truncation 로직 적용 완료.
+3.  **RangeToXLOPER12 메모리 누수 수정**: `ScopeGuard`에 `lpmref` 해제 로직 추가.
 
 ### 향후 개선 계획 (Proposed Plan)
 1.  **[C++] 잔존 메모리 누수 및 오버플로우 수정**:
-    *   `RangeToXLOPER12`, `AnyToXLOPER12`의 `ScopeGuard` 위치 및 로직 수정.
+    *   `AnyToXLOPER12`의 `ScopeGuard` 위치 및 로직 수정.
     *   `WideToUtf8`에 입력 길이 제한(INT_MAX) 추가.
     *   `ConvertGrid`에 `try-catch` 블록 추가.
 2.  **[Go] DeepCopy 안전성 확보**:
