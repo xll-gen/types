@@ -69,9 +69,11 @@
 **Result:** Reduced code duplication and improved maintainability.
 
 ## 13. Remove Unused `PascalStringToCString`
-**Status:** Proposed
-**Description:** `PascalStringToCString` in `src/PascalString.cpp` is unused and seemingly incorrect (casts `unsigned short` to `char`).
-**Plan:** Remove the function and its declaration.
+**Status:** Completed
+**Date:** 2025-12-24
+**Description:** `PascalStringToCString` in `src/PascalString.cpp` was unused and incorrectly implemented (casted `unsigned short` to `char`).
+**Action:** Removed the function and its declaration from `src/PascalString.cpp` and `include/types/PascalString.h`.
+**Result:** Verified that the code still compiles and tests pass.
 
 ## 14. Consolidate String Conversion Logic
 **Status:** Proposed
