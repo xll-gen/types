@@ -17,19 +17,6 @@ std::vector<char> CStringToPascalString(const std::string& c_str) {
     return pascal_str;
 }
 
-std::string PascalStringToCString(const unsigned short* pascal_str) {
-    if (!pascal_str) {
-        return "";
-    }
-    unsigned short length = pascal_str[0];
-    std::string result;
-    result.reserve(length);
-    for (unsigned short i = 0; i < length; ++i) {
-        result.push_back(static_cast<char>(pascal_str[i + 1]));
-    }
-    return result;
-}
-
 std::vector<wchar_t> WStringToPascalString(const std::wstring& w_str) {
     unsigned short length = static_cast<unsigned short>(std::min((size_t)32767, w_str.length()));
     std::vector<wchar_t> pascal_str(length + 2);
