@@ -4,58 +4,57 @@
 
 ## 1. 진단 요약 (Executive Summary)
 
-현재 API는 기본적인 데이터 변환을 지원하나, **DoS(서비스 거부) 공격 취약점**과 **메모리 누수**, 그리고 **언어 간 기능 불일치**가 존재합니다. 특히 Go 언어의 `DeepCopy` 구현체는 입력 데이터 길이를 검증하지 않아 심각한 DoS 위험이 있으며, C++ 변환 로직에는 예외 발생 시 메모리 누수가 발생하는 경로가 확인되었습니다.
+현재 API는 대부분의 주요 보안 취약점(Go DeepCopy DoS, C++ Integer Overflow)을 해결한 상태이나, **RAII 패턴 위반으로 인한 일부 메모리 누수 가능성**과 **언어 간 기능 불일치(비동기 핸들 미지원)**가 남아있습니다. 기존에 치명적이었던 DoS 취약점들은 코드를 확인한 결과 **해결됨(Resolved)**으로 파악되었습니다.
 
 ## 2. 상세 진단 (Detailed Diagnosis)
 
 ### 2.1 안전성 및 보안 취약점 (Safety & Security)
 
-#### [Critical] Go: DeepCopy DoS 취약점
-*   **위치**: `go/protocol/deepcopy.go` (`Grid.DeepCopy`, `NumGrid.DeepCopy`)
-*   **현상**: 입력된 `DataLength` 값을 신뢰하여 즉시 메모리를 할당합니다 (`make([]..., l)`).
-*   **위험**: 공격자가 조작된 패킷(거대 Length)을 전송할 경우, 서버(또는 Go 프로세스)가 즉시 OOM(Out of Memory)으로 종료될 수 있습니다.
-*   **참고**: `extensions.go`에 `Validate()` 함수가 존재하나, `DeepCopy` 과정에서 호출되지 않습니다.
+#### [Resolved] Go: DeepCopy DoS 취약점 (BUG-018)
+*   **상태**: **해결됨 (Secure)**
+*   **위치**: `go/protocol/deepcopy.go`
+*   **분석**: 현재 구현체는 `make` 호출 전 `DataLength * ElementSize`가 실제 버퍼 크기(`rcv._tab.Bytes`)를 초과하지 않는지 검증하는 로직이 포함되어 있습니다. 따라서 악의적인 길이 조작 공격으로부터 안전합니다.
 
-#### [Medium] C++: AnyToXLOPER12 메모리 누수 (BUG-004)
-*   **위치**: `src/converters.cpp` (`AnyToXLOPER12`, NumGrid 케이스)
-*   **현상**: `new XLOPER12[count]` 할당 시 `std::bad_alloc` 예외가 발생하면, 앞서 할당된 `op` 구조체가 해제되지 않고 누수됩니다. `ScopeGuard`가 할당 이후에 선언되어 있어 예외를 방어하지 못합니다.
+#### [Resolved] C++: WideToUtf8 정수 오버플로우
+*   **상태**: **해결됨 (Secure)**
+*   **위치**: `src/utility.cpp`
+*   **분석**: 문자열 길이가 `INT_MAX`를 초과하는 경우 명시적으로 `std::runtime_error`를 발생시키는 검증 로직이 존재합니다.
 
-#### [Medium] C++: ConvertGrid 예외 전파 (AGENTS.md 위반)
-*   **위치**: `src/converters.cpp` (`ConvertGrid`)
-*   **현상**: `builder.CreateVector` 등에서 메모리 할당 실패 시 `std::bad_alloc` 예외가 그대로 외부(Excel 호스트)로 전파됩니다. 이는 "Top-level converters must wrap logic in try-catch" 가이드라인을 위반합니다.
-*   **위험**: 호스트 프로세스(Excel)의 비정상 종료를 유발할 수 있습니다.
+#### [Medium] C++: AnyToXLOPER12 메모리 누수 (BUG-017)
+*   **상태**: **취약 (Vulnerable)**
+*   **위치**: `src/converters.cpp` (`AnyToXLOPER12`, NumGrid Case)
+*   **현상**: `op` 구조체를 할당한 후, `lparray`를 `new`로 할당하는 과정에서 예외가 발생하면 `op`를 해제해줄 `ScopeGuard`가 아직 선언되지 않은 상태입니다. 이로 인해 `op` 객체 누수가 발생합니다.
+*   **개선안**: `ScopeGuard`의 선언 위치를 `op` 할당 직후로 이동해야 합니다.
 
-#### [Low] C++: WideToUtf8 정수 오버플로우
-*   **위치**: `src/utility.cpp` (`WideToUtf8`)
-*   **현상**: 입력 문자열의 길이가 `INT_MAX`를 초과할 경우 `(int)` 캐스팅으로 인해 오버플로우가 발생하며, `WideCharToMultiByte` API에 잘못된 길이 인자가 전달될 수 있습니다.
+#### [Low] C++: RangeToXLOPER12 메모리 누수 (BUG-014)
+*   **상태**: **취약 (Vulnerable)**
+*   **위치**: `src/converters.cpp` (`RangeToXLOPER12`)
+*   **현상**: `lpmref` 메모리 할당 후 예외 발생 시, `ScopeGuard`가 `ReleaseXLOPER12(op)`를 호출하지만, `ReleaseXLOPER12`는 `op`가 가리키는 동적 메모리(`lpmref`)를 해제하지 않습니다.
+*   **개선안**: `ScopeGuard` 내에서 `lpmref`를 명시적으로 해제하거나, 커스텀 삭제 로직을 추가해야 합니다.
 
 ### 2.2 언어 간 불일치 (Inconsistencies)
 
 #### 미지원 타입 (Missing Types)
 *   **항목**: `AsyncHandle`, `RefCache`
-*   **Go**: 스키마 및 `DeepCopy`에서 지원.
-*   **C++**: `AnyToXLOPER12` 변환 시 해당 타입을 무시하고 `Nil`로 변환 (데이터 소실).
+*   **Go**: 스키마 및 `DeepCopy`에서 지원하며 정상 동작함.
+*   **C++**: `AnyToXLOPER12` 변환 스위치문(`switch`)에 해당 케이스가 없음. `default`로 빠져 `Nil`로 변환됨.
+*   **영향**: Go에서 비동기 핸들 등을 보내도 Excel에서는 `Nil`로 수신됨 (데이터 소실).
 
 #### 에러 코드 처리 (Error Handling)
-*   **C++**: 0-1999 범위의 레거시 에러 코드를 프로토콜 에러(2000+)로 자동 매핑.
-*   **Go**: 별도의 매핑 로직 없음 (사용자가 직접 2000+ 코드를 사용해야 함).
+*   **상태**: **일관성 있음 (Consistent)**
+*   **분석**: C++ 라이브러리가 Excel 내부 에러(0~1999)와 Protocol 에러(2000+) 간의 매핑을 `ProtocolErrorToExcel` 함수를 통해 올바르게 처리하고 있음을 확인했습니다.
 
 ## 3. 개선 방안 (Improvement Plan)
 
-### 3.1 [Go] DeepCopy 안전성 강화 (즉시 조치 필요)
-*   **조치**: `DeepCopy` 메서드 진입 시 `DataLength`가 `Rows * Cols`와 일치하는지, 그리고 전체 크기가 허용 범위(`math.MaxInt32`) 이내인지 검증하는 로직 추가.
-*   **방법**: `extensions.go`의 `Validate()` 로직을 `DeepCopy` 내에 통합하거나 선행 호출.
+### 3.1 [C++] 메모리 누수 수정 (BUG-017, BUG-014)
+*   **AnyToXLOPER12**: `NumGrid` 처리 블록 진입 시 `ScopeGuard`를 즉시 선언하여 `op` 누수 방지.
+*   **RangeToXLOPER12**: `ScopeGuard` 람다 함수 내에 `if (op->val.mref.lpmref) delete[] (char*)op->val.mref.lpmref;` 로직 추가.
 
-### 3.2 [C++] 메모리 누수 및 예외 처리 수정
-*   **조치 1**: `AnyToXLOPER12`의 `ScopeGuard` 선언 위치를 `op` 할당 직후로 이동하여 `new[]` 예외 발생 시에도 `op`가 해제되도록 수정.
-*   **조치 2**: `ConvertGrid` 함수 전체를 `try-catch`로 감싸고, 예외 발생 시 빈 그리드나 에러 객체를 반환하도록 수정.
-
-### 3.3 [C++] 입력 검증 강화
-*   **조치**: `WideToUtf8` 함수 도입부에 `wstr.size() > INT_MAX` 검증 추가 (오버플로우 방지).
-
-### 3.4 [공통] 일관성 확보
-*   **조치**: C++ `AnyToXLOPER12`에서 `AsyncHandle` 수신 시 `Nil` 대신 `xlerrNA` 또는 `xlerrValue`를 반환하여 데이터 소실을 명시적으로 알림 (추후 비동기 UDF 지원 시 구현).
+### 3.2 [C++] 누락된 타입 지원 추가
+*   **AnyToXLOPER12**: `AsyncHandle` 및 `RefCache` 케이스를 추가.
+    *   현재 Excel API 제한으로 인해 완벽한 대응은 어려우나, 최소한 `xlerrNA` 또는 `xlerrValue`를 반환하여 `Nil`과 구분하거나, 가능한 경우 문자열 표현으로 변환.
+    *   제안: `RefCache`는 Key(String)를 반환하고, `AsyncHandle`은 `#ASYNC!` 와 같은 의미 있는 에러나 문자열을 반환.
 
 ## 4. 이력 (History)
-*   **2023-10-XX**: 초기 진단. 에러 코드 매핑 불일치 해결 완료.
-*   **2025-12-23**: 포괄적 API 안전성 진단 및 개선 계획 업데이트.
+*   **2023-10-XX**: 초기 진단.
+*   **2025-12-23**: 재진단 완료. Go DoS 취약점 및 C++ 오버플로우 해결 확인. 잔여 메모리 누수 및 타입 불일치 식별.
