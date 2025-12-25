@@ -283,13 +283,14 @@ LPXLOPER12 AnyToXLOPER12(const protocol::Any* any) {
                  op->xltype = xltypeMulti | xlbitDLLFree;
                  op->val.array.rows = rows;
                  op->val.array.columns = cols;
-                 op->val.array.lparray = new XLOPER12[count];
 
-                 // Ensure we clean up if something goes wrong during population (unlikely for NumGrid but good practice)
+                 // BUG-017: Guard must be declared before allocation to protect 'op'
                  ScopeGuard guard([&]() {
-                     delete[] op->val.array.lparray;
+                     if (op->val.array.lparray) delete[] op->val.array.lparray;
                      ReleaseXLOPER12(op);
                  });
+
+                 op->val.array.lparray = new XLOPER12[count];
 
                  auto data = ng->data();
                  for(size_t i=0; i<count; ++i) {
@@ -302,6 +303,21 @@ LPXLOPER12 AnyToXLOPER12(const protocol::Any* any) {
             }
             case protocol::AnyValue::Range: {
                 return RangeToXLOPER12(any->val_as_Range());
+            }
+            case protocol::AnyValue::RefCache: {
+                const auto* rc = any->val_as_RefCache();
+                if (rc && rc->key()) {
+                    std::wstring ws = StringToWString(rc->key()->str());
+                    return NewExcelString(ws);
+                }
+                LPXLOPER12 op = NewXLOPER12();
+                op->xltype = xltypeErr | xlbitDLLFree;
+                op->val.err = xlerrNA;
+                return op;
+            }
+            case protocol::AnyValue::AsyncHandle: {
+                // Return "#ASYNC!" string to indicate handle
+                return NewExcelString(L"#ASYNC!");
             }
             case protocol::AnyValue::Nil:
             default: {
@@ -342,7 +358,11 @@ LPXLOPER12 RangeToXLOPER12(const protocol::Range* range) {
         size_t refs_count = range->refs()->size();
 
         // Guard against leaks if new throws
+        // BUG-014: Ensure lpmref is freed if set
         ScopeGuard guard([&]() {
+            if (op->val.mref.lpmref) {
+                 delete[] (char*)op->val.mref.lpmref;
+            }
             ReleaseXLOPER12(op);
         });
 
