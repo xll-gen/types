@@ -1,7 +1,6 @@
 #include "types/converters.h"
 #include "types/mem.h"
 #include "types/utility.h"
-#include "types/PascalString.h"
 #include "types/ScopeGuard.h"
 #include <vector>
 #include <algorithm>
@@ -455,73 +454,8 @@ LPXLOPER12 GridToXLOPER12(const protocol::Grid* grid) {
                 case protocol::ScalarValue::Str: {
                     cell.xltype = xltypeStr;
                     const auto* fbStr = scalar->val_as_Str()->val();
-                    if (!fbStr) {
-                        cell.val.str = new XCHAR[2];
-                        cell.val.str[0] = 0;
-                        cell.val.str[1] = 0;
-                    } else {
-                        const char* utf8 = fbStr->c_str();
-                        size_t realLen = fbStr->size();
-
-                        // Optimization/Security: Excel 12 strings are limited to 32767 chars.
-                        // If the input is huge, we don't need to convert all of it just to truncate it.
-                        // 32767 chars can be at most ~132KB (4 bytes per char) in UTF-8.
-                        // We clamp the input to a safe margin (200,000 bytes) to prevent allocating
-                        // huge temporary buffers (e.g. 20MB) for strings that will be truncated anyway.
-                        // This also prevents integer overflow when casting size_t to int.
-                        if (realLen > 200000) {
-                            realLen = 200000;
-                        }
-                        int utf8Len = static_cast<int>(realLen);
-
-                        // CP_UTF8 = 65001
-                        // Optimization: Try to convert using a stack buffer first to avoid double API call.
-                        // Most Excel strings are small.
-                        XCHAR stackBuf[256];
-                        int needed = 0;
-
-                        if (utf8Len < 256) {
-                            needed = MultiByteToWideChar(65001, 0, utf8, utf8Len, stackBuf, 256);
-                        }
-
-                        if (needed > 0) {
-                            // Successful conversion to stack buffer
-                            cell.val.str = new XCHAR[needed + 2];
-                            std::memcpy(cell.val.str + 1, stackBuf, needed * sizeof(XCHAR));
-                            cell.val.str[0] = (XCHAR)needed;
-                            cell.val.str[needed + 1] = 0;
-                        } else {
-                            // Fallback to double-call (or string too long for stack buffer)
-                            needed = MultiByteToWideChar(65001, 0, utf8, utf8Len, NULL, 0);
-
-                            // Safety check: Don't allocate huge memory for strings.
-                            if (needed < 0 || needed > 10000000 || (size_t)needed > SIZE_MAX / sizeof(XCHAR) - 2) {
-                                cell.val.str = new XCHAR[2];
-                                cell.val.str[0] = 0;
-                                cell.val.str[1] = 0;
-                            } else {
-                                if (needed > 32767) {
-                                    XCHAR* temp = new XCHAR[needed + 2];
-                                    MultiByteToWideChar(65001, 0, utf8, utf8Len, temp + 1, needed);
-
-                                    cell.val.str = new XCHAR[32767 + 2];
-                                    std::memcpy(cell.val.str + 1, temp + 1, 32767 * sizeof(XCHAR));
-
-                                    delete[] temp;
-
-                                    cell.val.str[0] = 32767;
-                                    cell.val.str[32767 + 1] = 0;
-                                } else {
-                                    cell.val.str = new XCHAR[needed + 2];
-                                    if (needed > 0) {
-                                        MultiByteToWideChar(65001, 0, utf8, utf8Len, cell.val.str + 1, needed);
-                                    }
-                                    cell.val.str[0] = (XCHAR)needed;
-                                    cell.val.str[needed + 1] = 0;
-                                }
-                            }
-                        }
-                    }
+                    const char* utf8 = fbStr ? fbStr->c_str() : nullptr;
+                    Utf8ToExcelString(utf8, cell.val.str);
                     break;
                 }
                 case protocol::ScalarValue::Err:
