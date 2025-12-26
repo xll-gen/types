@@ -283,13 +283,17 @@ LPXLOPER12 AnyToXLOPER12(const protocol::Any* any) {
                  op->xltype = xltypeMulti | xlbitDLLFree;
                  op->val.array.rows = rows;
                  op->val.array.columns = cols;
-                 op->val.array.lparray = new XLOPER12[count];
+                 op->val.array.lparray = nullptr;
 
-                 // Ensure we clean up if something goes wrong during population (unlikely for NumGrid but good practice)
+                 // Ensure we clean up if something goes wrong (e.g. allocation failure)
                  ScopeGuard guard([&]() {
-                     delete[] op->val.array.lparray;
+                     if (op->val.array.lparray) {
+                         delete[] op->val.array.lparray;
+                     }
                      ReleaseXLOPER12(op);
                  });
+
+                 op->val.array.lparray = new XLOPER12[count];
 
                  auto data = ng->data();
                  for(size_t i=0; i<count; ++i) {
@@ -337,12 +341,16 @@ LPXLOPER12 RangeToXLOPER12(const protocol::Range* range) {
     try {
         LPXLOPER12 op = NewXLOPER12();
         op->xltype = xltypeRef | xlbitDLLFree;
+        op->val.mref.lpmref = nullptr;
 
         // Safe allocation size calculation
         size_t refs_count = range->refs()->size();
 
-        // Guard against leaks if new throws
+        // Guard against leaks if new throws or subsequent errors occur
         ScopeGuard guard([&]() {
+            if (op->val.mref.lpmref) {
+                delete[] (char*)op->val.mref.lpmref;
+            }
             ReleaseXLOPER12(op);
         });
 
