@@ -282,6 +282,7 @@ LPXLOPER12 AnyToXLOPER12(const protocol::Any* any) {
                  op->xltype = xltypeMulti | xlbitDLLFree;
                  op->val.array.rows = rows;
                  op->val.array.columns = cols;
+                 op->val.array.lparray = nullptr;
 
                  // BUG-017: Guard must be declared before allocation to protect 'op'
                  ScopeGuard guard([&]() {
@@ -352,6 +353,7 @@ LPXLOPER12 RangeToXLOPER12(const protocol::Range* range) {
     try {
         LPXLOPER12 op = NewXLOPER12();
         op->xltype = xltypeRef | xlbitDLLFree;
+        op->val.mref.lpmref = nullptr;
 
         // Safe allocation size calculation
         size_t refs_count = range->refs()->size();

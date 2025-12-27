@@ -1,5 +1,6 @@
 #include "types/utility.h"
 #include "types/mem.h"
+#include "types/ScopeGuard.h"
 #include <vector>
 #include <cstdio>
 #include <cstdarg>
@@ -141,11 +142,14 @@ void Utf8ToExcelString(const char* utf8, XCHAR*& outStr) {
         } else {
             if (needed > 32767) {
                 XCHAR* temp = new XCHAR[needed + 2];
+                ScopeGuard tempGuard([&]() { delete[] temp; });
+
                 MultiByteToWideChar(65001, 0, utf8, utf8Len, temp + 1, needed);
 
                 outStr = new XCHAR[32767 + 2];
                 std::memcpy(outStr + 1, temp + 1, 32767 * sizeof(XCHAR));
 
+                tempGuard.Dismiss();
                 delete[] temp;
 
                 outStr[0] = 32767;
