@@ -1,33 +1,53 @@
 #include "types/utility.h"
-#include "types/mem.h"
-#include "types/ScopeGuard.h"
 #include <vector>
-#include <cstdio>
-#include <cstdarg>
 #include <stdexcept>
 #include <limits>
+#include <cstdarg>
+#include <cstdio>
+#include <cstring>
+#include "types/mem.h" // For TempStr12/TempInt12 if needed (actually they use thread local)
 
 #ifdef __linux__
 #include <unistd.h>
 #include <limits.h>
 #endif
 
+// Limit strings to 10MB to prevent DoS
+static const size_t MAX_STRING_SIZE = 10 * 1024 * 1024;
+
 std::wstring StringToWString(const std::string& str) {
     if (str.empty()) return std::wstring();
 
-    if (str.size() > 10000000) {
-        throw std::runtime_error("String too long");
-    }
-    if (str.size() > (size_t)std::numeric_limits<int>::max()) {
-        throw std::runtime_error("String too long (overflow)");
+    if (str.size() > MAX_STRING_SIZE) {
+        throw std::length_error("String too long for conversion");
     }
 
-    int size_needed = MultiByteToWideChar(CP_UTF8, 0, &str[0], (int)str.size(), NULL, 0);
+    if (str.size() > (size_t)std::numeric_limits<int>::max()) {
+        throw std::length_error("String too long for conversion");
+    }
+
+    int size_needed = MultiByteToWideChar(65001, 0, &str[0], (int)str.size(), NULL, 0);
     if (size_needed <= 0) return std::wstring();
 
     std::wstring wstrTo(size_needed, 0);
-    MultiByteToWideChar(CP_UTF8, 0, &str[0], (int)str.size(), &wstrTo[0], size_needed);
+    MultiByteToWideChar(65001, 0, &str[0], (int)str.size(), &wstrTo[0], size_needed);
     return wstrTo;
+}
+
+std::string WideToUtf8(const std::wstring& wstr) {
+    if (wstr.empty()) return "";
+
+    // Explicit check as per Bug 15 mitigation
+    if (wstr.size() > (size_t)std::numeric_limits<int>::max()) {
+         throw std::length_error("Wide string too long (overflow)");
+    }
+
+    int size_needed = WideCharToMultiByte(65001, 0, &wstr[0], (int)wstr.size(), NULL, 0, NULL, NULL);
+    if (size_needed <= 0) return "";
+
+    std::string strTo(size_needed, 0);
+    WideCharToMultiByte(65001, 0, &wstr[0], (int)wstr.size(), &strTo[0], size_needed, NULL, NULL);
+    return strTo;
 }
 
 std::wstring ConvertToWString(const char* str) {
@@ -36,60 +56,31 @@ std::wstring ConvertToWString(const char* str) {
     return StringToWString(s);
 }
 
-std::string WideToUtf8(const std::wstring& wstr) {
-    if (wstr.empty()) return "";
-    if (wstr.size() > (size_t)std::numeric_limits<int>::max()) {
-        throw std::runtime_error("Wide string too long (overflow)");
-    }
-    int size_needed = WideCharToMultiByte(CP_UTF8, 0, &wstr[0], (int)wstr.size(), NULL, 0, NULL, NULL);
-    std::string strTo(size_needed, 0);
-    WideCharToMultiByte(CP_UTF8, 0, &wstr[0], (int)wstr.size(), &strTo[0], size_needed, NULL, NULL);
-    return strTo;
-}
-
-LPXLOPER12 TempStr12(const wchar_t* txt) {
-    static thread_local XLOPER12 xOp[10];
-    static thread_local int i = 0;
-    i = (i + 1) % 10;
-    LPXLOPER12 op = &xOp[i];
-
-    op->xltype = xltypeStr;
-    static thread_local wchar_t strBuf[10][256];
-    size_t len = 0;
-    if (txt) len = wcslen(txt);
-    if (len > 255) len = 255;
-
-    strBuf[i][0] = (wchar_t)len;
-    if (len > 0) wmemcpy(strBuf[i]+1, txt, len);
-
-    op->val.str = strBuf[i];
-    return op;
-}
-
-LPXLOPER12 TempInt12(int val) {
-    static thread_local XLOPER12 xOp[10];
-    static thread_local int i = 0;
-    i = (i + 1) % 10;
-    LPXLOPER12 op = &xOp[i];
-    op->xltype = xltypeInt;
-    op->val.w = val;
-    return op;
-}
-
 std::string ConvertExcelString(const wchar_t* wstr) {
     if (!wstr) return "";
-    size_t len = (size_t)wstr[0]; // Pascal string length
+
+    // Excel strings are Pascal-like: First char is length
+    size_t len = (size_t)wstr[0];
+
     if (len == 0) return "";
 
-    if (len > (size_t)std::numeric_limits<int>::max()) {
-        return "";
+    // Skip the length prefix
+    const wchar_t* actualStr = wstr + 1;
+
+    // Safety check for huge strings (unlikely in Excel but possible in memory)
+    if (len > MAX_STRING_SIZE) {
+         throw std::length_error("String too long for conversion");
     }
 
-    int size_needed = WideCharToMultiByte(CP_UTF8, 0, wstr + 1, (int)len, NULL, 0, NULL, NULL);
+    if (len > (size_t)std::numeric_limits<int>::max()) {
+        throw std::length_error("String too long for conversion");
+    }
+
+    int size_needed = WideCharToMultiByte(65001, 0, actualStr, (int)len, NULL, 0, NULL, NULL);
     if (size_needed <= 0) return "";
 
     std::string strTo(size_needed, 0);
-    WideCharToMultiByte(CP_UTF8, 0, wstr + 1, (int)len, &strTo[0], size_needed, NULL, NULL);
+    WideCharToMultiByte(65001, 0, actualStr, (int)len, &strTo[0], size_needed, NULL, NULL);
     return strTo;
 }
 
@@ -141,16 +132,14 @@ void Utf8ToExcelString(const char* utf8, XCHAR*& outStr) {
             outStr[1] = 0;
         } else {
             if (needed > 32767) {
-                XCHAR* temp = new XCHAR[needed + 2];
-                ScopeGuard tempGuard([&]() { delete[] temp; });
+                // Manual memory management for temp since we don't have ScopeGuard header here or want to keep it simple
+                // We use std::vector to avoid manual delete[]
+                std::vector<XCHAR> tempVec(needed + 2);
 
-                MultiByteToWideChar(65001, 0, utf8, utf8Len, temp + 1, needed);
+                MultiByteToWideChar(65001, 0, utf8, utf8Len, tempVec.data() + 1, needed);
 
                 outStr = new XCHAR[32767 + 2];
-                std::memcpy(outStr + 1, temp + 1, 32767 * sizeof(XCHAR));
-
-                tempGuard.Dismiss();
-                delete[] temp;
+                std::memcpy(outStr + 1, tempVec.data() + 1, 32767 * sizeof(XCHAR));
 
                 outStr[0] = 32767;
                 outStr[32767 + 1] = 0;
@@ -166,22 +155,46 @@ void Utf8ToExcelString(const char* utf8, XCHAR*& outStr) {
     }
 }
 
+// Restoring TempStr12 and TempInt12 as they were removed
+LPXLOPER12 TempStr12(const wchar_t* txt) {
+    static thread_local XLOPER12 xOp[10];
+    static thread_local int i = 0;
+    i = (i + 1) % 10;
+    LPXLOPER12 op = &xOp[i];
+
+    op->xltype = xltypeStr;
+    static thread_local wchar_t strBuf[10][256];
+    size_t len = 0;
+    if (txt) len = wcslen(txt);
+    if (len > 255) len = 255;
+
+    strBuf[i][0] = (wchar_t)len;
+    if (len > 0) wmemcpy(strBuf[i]+1, txt, len);
+
+    op->val.str = strBuf[i];
+    return op;
+}
+
+LPXLOPER12 TempInt12(int val) {
+    static thread_local XLOPER12 xOp[10];
+    static thread_local int i = 0;
+    i = (i + 1) % 10;
+    LPXLOPER12 op = &xOp[i];
+    op->xltype = xltypeInt;
+    op->val.w = val;
+    return op;
+}
+
 bool IsSingleCell(LPXLOPER12 pxRef) {
     if (!pxRef) return false;
     if (pxRef->xltype & xltypeSRef) {
-        int h = pxRef->val.sref.ref.rwLast - pxRef->val.sref.ref.rwFirst + 1;
-        int w = pxRef->val.sref.ref.colLast - pxRef->val.sref.ref.colFirst + 1;
-        return (h == 1 && w == 1);
+        return (pxRef->val.sref.ref.rwFirst == pxRef->val.sref.ref.rwLast) &&
+               (pxRef->val.sref.ref.colFirst == pxRef->val.sref.ref.colLast);
     }
     if (pxRef->xltype & xltypeRef) {
-        // Multi-area reference
-        // Check if only 1 area and it is 1x1
-        if (pxRef->val.mref.lpmref->count == 1) {
-            const auto& r = pxRef->val.mref.lpmref->reftbl[0];
-            int h = r.rwLast - r.rwFirst + 1;
-            int w = r.colLast - r.colFirst + 1;
-            return (h == 1 && w == 1);
-        }
+        return (pxRef->val.mref.lpmref->count == 1) &&
+               (pxRef->val.mref.lpmref->reftbl[0].rwFirst == pxRef->val.mref.lpmref->reftbl[0].rwLast) &&
+               (pxRef->val.mref.lpmref->reftbl[0].colFirst == pxRef->val.mref.lpmref->reftbl[0].colLast);
     }
     return false;
 }
@@ -211,27 +224,29 @@ std::wstring GetXllDir() {
 }
 
 // Debug Logging
-static bool g_debug_enabled = false;
+static bool g_debug = false;
 
-void SetDebugFlag(bool enabled) {
-    g_debug_enabled = enabled;
+void SetDebugFlag(bool debug) {
+    g_debug = debug;
 }
 
 bool GetDebugFlag() {
-    return g_debug_enabled;
+    return g_debug;
 }
 
 void DebugLog(const char* fmt, ...) {
-    if (!g_debug_enabled) return;
+    if (!g_debug) return;
 
     va_list args;
     va_start(args, fmt);
-#ifdef _WIN32
-    char buffer[2048];
+    char buffer[1024];
     vsnprintf(buffer, sizeof(buffer), fmt, args);
-    OutputDebugStringA(buffer);
-#else
-    vfprintf(stderr, fmt, args);
-#endif
     va_end(args);
+
+#ifdef _WIN32
+    OutputDebugStringA(buffer);
+    OutputDebugStringA("\n");
+#else
+    fprintf(stderr, "[DEBUG] %s\n", buffer);
+#endif
 }
