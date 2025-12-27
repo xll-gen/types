@@ -22,6 +22,7 @@ std::wstring StringToWString(const std::string& str);
 std::string WideToUtf8(const std::wstring& wstr);
 std::wstring ConvertToWString(const char* str);
 std::string ConvertExcelString(const wchar_t* wstr);
+void Utf8ToExcelString(const char* utf8, XCHAR*& outStr);
 
 // Cell Helper
 bool IsSingleCell(LPXLOPER12 pxRef);

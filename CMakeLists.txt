@@ -21,7 +21,6 @@ include(flatbuffers)
 add_library(xll-gen-types STATIC
     src/converters.cpp
     src/mem.cpp
-    src/PascalString.cpp
     src/utility.cpp
     src/win_compat.cpp
     src/xlcall.cpp
