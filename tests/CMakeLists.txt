@@ -27,3 +27,8 @@ add_executable(null_safety_test test_null_safety.cpp)
 target_link_libraries(null_safety_test PRIVATE xll-gen-types)
 target_include_directories(null_safety_test PRIVATE ${CMAKE_SOURCE_DIR}/include)
 add_test(NAME null_safety_test COMMAND null_safety_test)
+
+add_executable(scoped_xloper_test test_scoped_xloper.cpp)
+target_link_libraries(scoped_xloper_test PRIVATE xll-gen-types)
+target_include_directories(scoped_xloper_test PRIVATE ${CMAKE_SOURCE_DIR}/include)
+add_test(NAME scoped_xloper_test COMMAND scoped_xloper_test)

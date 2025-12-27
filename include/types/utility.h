@@ -33,3 +33,6 @@ std::wstring GetXllDir();
 void SetDebugFlag(bool enabled);
 bool GetDebugFlag();
 void DebugLog(const char* fmt, ...);
+
+// Include ScopedXLOPER12 helper
+#include "types/ScopedXLOPER12.h"
