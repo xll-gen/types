@@ -1,6 +1,5 @@
 #include "types/mem.h"
 #include "types/ObjectPool.h"
-#include "types/PascalString.h"
 #include "types/ScopeGuard.h"
 #include <mutex>
 #include <vector>
@@ -25,15 +24,17 @@ LPXLOPER12 NewExcelString(const std::wstring& str) {
     LPXLOPER12 p = NewXLOPER12();
     p->xltype = xltypeStr | xlbitDLLFree;
 
-    std::vector<wchar_t> pascalStr = WStringToPascalString(str);
-
     ScopeGuard guard([&]() {
         ReleaseXLOPER12(p);
     });
 
-    // Allocate buffer for the string.
-    wchar_t* buffer = new wchar_t[pascalStr.size()];
-    std::memcpy(buffer, pascalStr.data(), pascalStr.size() * sizeof(wchar_t));
+    size_t len = str.length();
+    if (len > 32767) len = 32767;
+
+    wchar_t* buffer = new wchar_t[len + 2];
+    buffer[0] = (wchar_t)len;
+    if (len > 0) std::memcpy(buffer + 1, str.data(), len * sizeof(wchar_t));
+    buffer[len + 1] = 0; // Null terminate for safety, though not strictly required for Pascal string
 
     p->val.str = buffer;
     guard.Dismiss();
