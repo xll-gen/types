@@ -175,16 +175,18 @@
 *   **Description:**
     In `src/converters.cpp`, `RangeToXLOPER12` allocates `op->val.mref.lpmref` using `new`. If an exception occurs (e.g. `std::bad_alloc` later), the `ScopeGuard` releases `op` but fails to free the allocated `lpmref` buffer, causing a leak.
 *   **My Judgment:**
+    Resolved (Verified) - 2025-12-26.
     Fixed by ensuring the `ScopeGuard` explicitly deletes `op->val.mref.lpmref` (casted to `char*`) before releasing `op`.
 
 ## 15. Integer Overflow in `WideToUtf8`
 
-*   **Status:** Resolved (Verified)
+*   **Status:** Mitigated
 *   **Severity:** Low
 *   **Description:**
     In `src/utility.cpp`, `WideToUtf8` casts `wstring::size` to `int`. For strings > 2GB (unlikely but possible), this overflows, causing invalid arguments to `WideCharToMultiByte`.
 *   **My Judgment:**
-    Added explicit check: `if (wstr.size() > (size_t)std::numeric_limits<int>::max()) throw ...`.
+    Mitigated - 2025-12-26.
+    The code includes an explicit check: `if (wstr.size() > (size_t)std::numeric_limits<int>::max()) throw ...`. This prevents the overflow condition from being reached.
 
 ## 16. Unsafe API Exposure (`ConvertGrid`)
 
@@ -202,6 +204,7 @@
 *   **Description:**
     In `src/converters.cpp` (NumGrid case), `op` is acquired, then `lparray` is allocated via `new`. If `new` throws, `ScopeGuard` (declared after) is not active, leaking `op`.
 *   **My Judgment:**
+    Resolved (Verified) - 2025-12-26.
     Code inspection confirms `ScopeGuard` is declared *before* the `new XLOPER12[count]` allocation, ensuring `op` is released if allocation fails.
 
 ## 18. Denial of Service in Go DeepCopy
