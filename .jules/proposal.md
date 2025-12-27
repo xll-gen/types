@@ -12,10 +12,11 @@
 **Plan:** Refactor `MultiByteToWideChar` and `WideCharToMultiByte` implementation in `win_compat.cpp` to use other mechanisms (e.g., `mbstowcs` with UTF-8 locale, or a lightweight library).
 
 ## 3. Implement `GetXllDir` for Linux
-**Status:** Proposed
+**Status:** Completed
+**Date:** 2025-12-25
 **Description:** `src/utility.cpp` implements `GetXllDir` using `GetModuleFileNameW`. On Linux (via `win_compat`), this returns 0/empty string.
 **Impact:** Tests relying on file paths relative to the library location may fail or require workarounds on Linux.
-**Plan:** Implement `GetXllDir` using `/proc/self/exe` (Linux) or `dladdr` to find the shared library or executable path.
+**Result:** Implemented `GetXllDir` using `/proc/self/exe` (Linux) in `src/utility.cpp`.
 
 ## 4. Optimize Go DeepCopy for Byte Vectors
 **Status:** In Progress
@@ -70,13 +71,12 @@
 
 ## 13. Remove Unused `PascalStringToCString`
 **Status:** Completed
-**Date:** 2025-12-24
-**Description:** `PascalStringToCString` in `src/PascalString.cpp` was unused and incorrectly implemented (casted `unsigned short` to `char`).
-**Action:** Removed the function and its declaration from `src/PascalString.cpp` and `include/types/PascalString.h`.
-**Result:** Verified that the code still compiles and tests pass.
+**Date:** 2025-12-25
+**Description:** `PascalStringToCString` in `src/PascalString.cpp` is unused and seemingly incorrect (casts `unsigned short` to `char`).
+**Result:** Removed `src/PascalString.cpp` and `include/types/PascalString.h`.
 
 ## 14. Consolidate String Conversion Logic
-**Status:** Proposed
-**Date:** 2025-12-23
+**Status:** Completed
+**Date:** 2025-12-25
 **Description:** `GridToXLOPER12` implements custom `MultiByteToWideChar` logic with truncation and buffer size management. `src/utility.cpp` provides `StringToWString` but it doesn't support the specific Excel truncation (32767 chars) logic used in the converter.
-**Plan:** Create a specialized utility function (e.g., `Utf8ToExcelString`) in `src/utility.cpp` that encapsulates the truncation and optimization logic from `converters.cpp`. This would clean up `converters.cpp` and make the logic reusable.
+**Result:** Created `Utf8ToExcelString` in `src/utility.cpp` and updated `src/converters.cpp` to use it.
