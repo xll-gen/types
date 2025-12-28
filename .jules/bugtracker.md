@@ -204,26 +204,25 @@
 *   **Description:**
     In `src/converters.cpp` (NumGrid case), `op` is acquired, then `lparray` is allocated via `new`. If `new` throws, `ScopeGuard` (declared after) is not active, leaking `op`.
 *   **My Judgment:**
-    Resolved (Verified) - 2025-12-26.
-    Code inspection confirms `ScopeGuard` is declared *before* the `new XLOPER12[count]` allocation, ensuring `op` is released if allocation fails.
+    Resolved (Verified) - 2025-12-28.
+    Confirmed that `ScopeGuard` is declared before `new XLOPER12[]` allocation, ensuring safe cleanup.
 
 ## 18. Denial of Service in Go DeepCopy
 
 *   **Status:** Resolved (Verified)
 *   **Severity:** High
 *   **Description:**
-    In `go/protocol/deepcopy.go`, the `DeepCopy` methods for `Grid`, `NumGrid`, `Range`, and `AsyncHandle` allocate memory based on `DataLength` (or `RefsLength`, `ValLength`) from the FlatBuffer.
-    ```go
-    l := rcv.DataLength()
-    offsets := make([]flatbuffers.UOffsetT, l)
-    ```
-    If a malicious FlatBuffer specifies a huge length (e.g. 2 billion) but does not provide the corresponding data, this triggers a massive allocation (`make`), potentially causing the Go runtime to panic or exhaust memory (DoS). The loop following the allocation then iterates `l` times, compounding the CPU usage.
-    While `Validate` exists in `extensions.go`, `DeepCopy` does not call it and trusts the length field implicitly.
-
+    In `go/protocol/deepcopy.go`, `DeepCopy` methods allocated memory based on untrusted length fields without bounds checking, leading to potential DoS via huge allocations.
 *   **My Judgment:**
-    Modified `go/protocol/deepcopy.go` to enforce security checks before allocation. The fix verifies that the underlying buffer (`rcv._tab.Bytes`) is large enough to contain the claimed vector elements.
-    - `Grid`: Checked `l * 4 <= len(bytes)`.
-    - `NumGrid`: Checked `l * 8 <= len(bytes)`.
-    - `Range`: Checked `l * 16 <= len(bytes)`.
-    - `AsyncHandle`: Checked `l * 1 <= len(bytes)`.
-    This prevents DoS attacks by rejecting malformed buffers with inflated length fields. Verified with tests.
+    Resolved (Verified) - 2025-12-28.
+    Confirmed that `DeepCopy` methods for `Grid`, `NumGrid`, `Range`, `AsyncHandle` and others include security checks (`len * size <= buffer_len`) to prevent massive allocations.
+
+## 19. Inconsistent String Limit Constant
+
+*   **Status:** Resolved (Verified)
+*   **Severity:** Low
+*   **Description:**
+    In `src/utility.cpp`, the constant `MAX_STRING_SIZE` is defined as 10 MiB (10*1024*1024), but `Utf8ToExcelString` uses a hardcoded literal `10000000` (10 MB). While functionally similar, this inconsistency should be resolved for maintainability.
+*   **My Judgment:**
+    Resolved (Verified) - 2025-12-28.
+    Updated `Utf8ToExcelString` in `src/utility.cpp` to use `MAX_STRING_SIZE` for consistency. Verified by passing `utility_test`.

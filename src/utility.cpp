@@ -131,7 +131,8 @@ void Utf8ToExcelString(const char* utf8, XCHAR*& outStr) {
         needed = MultiByteToWideChar(65001, 0, utf8, utf8Len, NULL, 0);
 
         // Safety check: Don't allocate huge memory for strings.
-        if (needed < 0 || needed > 10000000 || (size_t)needed > SIZE_MAX / sizeof(XCHAR) - 2) {
+        // Use MAX_STRING_SIZE for consistency (Issue 19)
+        if (needed < 0 || (size_t)needed > MAX_STRING_SIZE || (size_t)needed > SIZE_MAX / sizeof(XCHAR) - 2) {
             outStr = new XCHAR[2];
             outStr[0] = 0;
             outStr[1] = 0;
