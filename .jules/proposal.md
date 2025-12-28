@@ -19,10 +19,10 @@
 **Result:** Implemented `GetXllDir` using `/proc/self/exe` (Linux) in `src/utility.cpp`.
 
 ## 4. Optimize Go DeepCopy for Byte Vectors
-**Status:** In Progress
-**Description:** In `go/protocol/deepcopy.go`, `AsyncHandle` (and potentially other future byte vectors) are copied byte-by-byte in a loop.
-**Impact:** Inefficient for large data.
-**Plan:** Use `CreateByteVector` (if available in generated bindings) or `CreateByteVector` logic to copy slices directly.
+**Status:** Completed
+**Date:** 2025-12-28
+**Description:** In `go/protocol/deepcopy.go`, `AsyncHandle` (and potentially other future byte vectors) were copied byte-by-byte.
+**Result:** Implemented `CreateByteVector` optimization for `AsyncHandle` (see Proposal 10).
 
 ## 5. Fix `XlError` Mapping
 **Status:** Completed
@@ -30,10 +30,10 @@
 **Action:** Added `ProtocolErrorToExcel` and `ExcelErrorToProtocol` helpers in `src/converters.cpp` to correctly offset the values by 2000. Updated `tests/test_converters.cpp` to verify correct mapping using real Excel values.
 
 ## 6. Support `RefCache` and `AsyncHandle` in `AnyToXLOPER12`
-**Status:** Proposed
-**Description:** `AnyToXLOPER12` currently does not handle `RefCache` and `AsyncHandle` types, defaulting to `xltypeNil`.
-**Impact:** Potential data loss or incorrect behavior if these types are returned to Excel.
-**Plan:** Determine appropriate mapping (e.g., `xltypeBigData` or string representation) and implement.
+**Status:** Completed
+**Date:** 2025-12-28
+**Description:** `AnyToXLOPER12` previously did not handle `RefCache` and `AsyncHandle` types.
+**Result:** Implemented handling in `src/converters.cpp`. `RefCache` returns the key as a string, and `AsyncHandle` returns "#ASYNC!".
 
 ## 7. Safety Hardening for C++ Converters
 **Status:** Completed
