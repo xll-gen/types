@@ -50,6 +50,11 @@ std::string WideToUtf8(const std::wstring& wstr) {
     return strTo;
 }
 
+std::wstring PascalToWString(const wchar_t* pstr) {
+    if (!pstr) return L"";
+    return std::wstring(pstr + 1, (size_t)pstr[0]);
+}
+
 std::wstring ConvertToWString(const char* str) {
     if (!str) return std::wstring();
     std::string s(str);
