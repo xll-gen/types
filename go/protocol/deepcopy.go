@@ -392,3 +392,192 @@ func (rcv *RefCache) DeepCopy(b *flatbuffers.Builder) flatbuffers.UOffsetT {
 	RefCacheAddKey(b, off)
 	return RefCacheEnd(b)
 }
+
+// Clone creates a deep copy of the RtdConnectRequest.
+func (rcv *RtdConnectRequest) Clone() *RtdConnectRequest {
+	if rcv == nil {
+		return nil
+	}
+	b := flatbuffers.NewBuilder(0)
+	off := rcv.DeepCopy(b)
+	b.Finish(off)
+	buf := b.FinishedBytes()
+	newBuf := make([]byte, len(buf))
+	copy(newBuf, buf)
+	return GetRootAsRtdConnectRequest(newBuf, 0)
+}
+
+// DeepCopy serializes the RtdConnectRequest into the builder.
+func (rcv *RtdConnectRequest) DeepCopy(b *flatbuffers.Builder) flatbuffers.UOffsetT {
+	if rcv == nil {
+		return 0
+	}
+
+	l := rcv.StringsLength()
+	if l < 0 || l > math.MaxInt32 {
+		return 0
+	}
+
+	// Security check: Strings vector contains offsets (4 bytes each).
+	if uint64(l)*4 > uint64(len(rcv._tab.Bytes)) {
+		return 0
+	}
+
+	stringsOffsets := make([]flatbuffers.UOffsetT, l)
+	for i := 0; i < l; i++ {
+		str := rcv.Strings(i)
+		stringsOffsets[i] = b.CreateByteString(str)
+	}
+
+	RtdConnectRequestStartStringsVector(b, l)
+	for i := l - 1; i >= 0; i-- {
+		b.PrependUOffsetT(stringsOffsets[i])
+	}
+	stringsOff := b.EndVector(l)
+
+	RtdConnectRequestStart(b)
+	RtdConnectRequestAddTopicId(b, rcv.TopicId())
+	RtdConnectRequestAddStrings(b, stringsOff)
+	RtdConnectRequestAddNewValues(b, rcv.NewValues())
+	return RtdConnectRequestEnd(b)
+}
+
+// Clone creates a deep copy of the RtdConnectResponse.
+func (rcv *RtdConnectResponse) Clone() *RtdConnectResponse {
+	if rcv == nil {
+		return nil
+	}
+	b := flatbuffers.NewBuilder(0)
+	off := rcv.DeepCopy(b)
+	b.Finish(off)
+	buf := b.FinishedBytes()
+	newBuf := make([]byte, len(buf))
+	copy(newBuf, buf)
+	return GetRootAsRtdConnectResponse(newBuf, 0)
+}
+
+// DeepCopy serializes the RtdConnectResponse into the builder.
+func (rcv *RtdConnectResponse) DeepCopy(b *flatbuffers.Builder) flatbuffers.UOffsetT {
+	if rcv == nil {
+		return 0
+	}
+
+	val := new(Any)
+	var valOff flatbuffers.UOffsetT
+	if rcv.Val(val) != nil {
+		valOff = val.DeepCopy(b)
+	}
+
+	RtdConnectResponseStart(b)
+	if valOff != 0 {
+		RtdConnectResponseAddVal(b, valOff)
+	}
+	return RtdConnectResponseEnd(b)
+}
+
+// Clone creates a deep copy of the RtdDisconnectRequest.
+func (rcv *RtdDisconnectRequest) Clone() *RtdDisconnectRequest {
+	if rcv == nil {
+		return nil
+	}
+	b := flatbuffers.NewBuilder(0)
+	off := rcv.DeepCopy(b)
+	b.Finish(off)
+	buf := b.FinishedBytes()
+	newBuf := make([]byte, len(buf))
+	copy(newBuf, buf)
+	return GetRootAsRtdDisconnectRequest(newBuf, 0)
+}
+
+// DeepCopy serializes the RtdDisconnectRequest into the builder.
+func (rcv *RtdDisconnectRequest) DeepCopy(b *flatbuffers.Builder) flatbuffers.UOffsetT {
+	if rcv == nil {
+		return 0
+	}
+	RtdDisconnectRequestStart(b)
+	RtdDisconnectRequestAddTopicId(b, rcv.TopicId())
+	return RtdDisconnectRequestEnd(b)
+}
+
+// Clone creates a deep copy of the RtdUpdate.
+func (rcv *RtdUpdate) Clone() *RtdUpdate {
+	if rcv == nil {
+		return nil
+	}
+	b := flatbuffers.NewBuilder(0)
+	off := rcv.DeepCopy(b)
+	b.Finish(off)
+	buf := b.FinishedBytes()
+	newBuf := make([]byte, len(buf))
+	copy(newBuf, buf)
+	return GetRootAsRtdUpdate(newBuf, 0)
+}
+
+// DeepCopy serializes the RtdUpdate into the builder.
+func (rcv *RtdUpdate) DeepCopy(b *flatbuffers.Builder) flatbuffers.UOffsetT {
+	if rcv == nil {
+		return 0
+	}
+
+	val := new(Any)
+	var valOff flatbuffers.UOffsetT
+	if rcv.Val(val) != nil {
+		valOff = val.DeepCopy(b)
+	}
+
+	RtdUpdateStart(b)
+	RtdUpdateAddTopicId(b, rcv.TopicId())
+	if valOff != 0 {
+		RtdUpdateAddVal(b, valOff)
+	}
+	return RtdUpdateEnd(b)
+}
+
+// Clone creates a deep copy of the BatchRtdUpdate.
+func (rcv *BatchRtdUpdate) Clone() *BatchRtdUpdate {
+	if rcv == nil {
+		return nil
+	}
+	b := flatbuffers.NewBuilder(0)
+	off := rcv.DeepCopy(b)
+	b.Finish(off)
+	buf := b.FinishedBytes()
+	newBuf := make([]byte, len(buf))
+	copy(newBuf, buf)
+	return GetRootAsBatchRtdUpdate(newBuf, 0)
+}
+
+// DeepCopy serializes the BatchRtdUpdate into the builder.
+func (rcv *BatchRtdUpdate) DeepCopy(b *flatbuffers.Builder) flatbuffers.UOffsetT {
+	if rcv == nil {
+		return 0
+	}
+
+	l := rcv.UpdatesLength()
+	if l < 0 || l > math.MaxInt32 {
+		return 0
+	}
+
+	// Security check: Updates vector contains offsets (4 bytes each)
+	if uint64(l)*4 > uint64(len(rcv._tab.Bytes)) {
+		return 0
+	}
+
+	offsets := make([]flatbuffers.UOffsetT, l)
+	u := new(RtdUpdate)
+	for i := 0; i < l; i++ {
+		if rcv.Updates(u, i) {
+			offsets[i] = u.DeepCopy(b)
+		}
+	}
+
+	BatchRtdUpdateStartUpdatesVector(b, l)
+	for i := l - 1; i >= 0; i-- {
+		b.PrependUOffsetT(offsets[i])
+	}
+	updatesOff := b.EndVector(l)
+
+	BatchRtdUpdateStart(b)
+	BatchRtdUpdateAddUpdates(b, updatesOff)
+	return BatchRtdUpdateEnd(b)
+}

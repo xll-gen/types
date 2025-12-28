@@ -83,6 +83,21 @@ struct AsyncResultBuilder;
 struct BatchAsyncResponse;
 struct BatchAsyncResponseBuilder;
 
+struct RtdConnectRequest;
+struct RtdConnectRequestBuilder;
+
+struct RtdConnectResponse;
+struct RtdConnectResponseBuilder;
+
+struct RtdDisconnectRequest;
+struct RtdDisconnectRequestBuilder;
+
+struct RtdUpdate;
+struct RtdUpdateBuilder;
+
+struct BatchRtdUpdate;
+struct BatchRtdUpdateBuilder;
+
 enum class XlError : int16_t {
   Null = 2000,
   Div0 = 2007,
@@ -1849,6 +1864,269 @@ inline ::flatbuffers::Offset<BatchAsyncResponse> CreateBatchAsyncResponseDirect(
   return protocol::CreateBatchAsyncResponse(
       _fbb,
       results__);
+}
+
+struct RtdConnectRequest FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
+  typedef RtdConnectRequestBuilder Builder;
+  enum FlatBuffersVTableOffset FLATBUFFERS_VTABLE_UNDERLYING_TYPE {
+    VT_TOPIC_ID = 4,
+    VT_STRINGS = 6,
+    VT_NEW_VALUES = 8
+  };
+  int32_t topic_id() const {
+    return GetField<int32_t>(VT_TOPIC_ID, 0);
+  }
+  const ::flatbuffers::Vector<::flatbuffers::Offset<::flatbuffers::String>> *strings() const {
+    return GetPointer<const ::flatbuffers::Vector<::flatbuffers::Offset<::flatbuffers::String>> *>(VT_STRINGS);
+  }
+  bool new_values() const {
+    return GetField<uint8_t>(VT_NEW_VALUES, 0) != 0;
+  }
+  bool Verify(::flatbuffers::Verifier &verifier) const {
+    return VerifyTableStart(verifier) &&
+           VerifyField<int32_t>(verifier, VT_TOPIC_ID, 4) &&
+           VerifyOffset(verifier, VT_STRINGS) &&
+           verifier.VerifyVector(strings()) &&
+           verifier.VerifyVectorOfStrings(strings()) &&
+           VerifyField<uint8_t>(verifier, VT_NEW_VALUES, 1) &&
+           verifier.EndTable();
+  }
+};
+
+struct RtdConnectRequestBuilder {
+  typedef RtdConnectRequest Table;
+  ::flatbuffers::FlatBufferBuilder &fbb_;
+  ::flatbuffers::uoffset_t start_;
+  void add_topic_id(int32_t topic_id) {
+    fbb_.AddElement<int32_t>(RtdConnectRequest::VT_TOPIC_ID, topic_id, 0);
+  }
+  void add_strings(::flatbuffers::Offset<::flatbuffers::Vector<::flatbuffers::Offset<::flatbuffers::String>>> strings) {
+    fbb_.AddOffset(RtdConnectRequest::VT_STRINGS, strings);
+  }
+  void add_new_values(bool new_values) {
+    fbb_.AddElement<uint8_t>(RtdConnectRequest::VT_NEW_VALUES, static_cast<uint8_t>(new_values), 0);
+  }
+  explicit RtdConnectRequestBuilder(::flatbuffers::FlatBufferBuilder &_fbb)
+        : fbb_(_fbb) {
+    start_ = fbb_.StartTable();
+  }
+  ::flatbuffers::Offset<RtdConnectRequest> Finish() {
+    const auto end = fbb_.EndTable(start_);
+    auto o = ::flatbuffers::Offset<RtdConnectRequest>(end);
+    return o;
+  }
+};
+
+inline ::flatbuffers::Offset<RtdConnectRequest> CreateRtdConnectRequest(
+    ::flatbuffers::FlatBufferBuilder &_fbb,
+    int32_t topic_id = 0,
+    ::flatbuffers::Offset<::flatbuffers::Vector<::flatbuffers::Offset<::flatbuffers::String>>> strings = 0,
+    bool new_values = false) {
+  RtdConnectRequestBuilder builder_(_fbb);
+  builder_.add_strings(strings);
+  builder_.add_topic_id(topic_id);
+  builder_.add_new_values(new_values);
+  return builder_.Finish();
+}
+
+inline ::flatbuffers::Offset<RtdConnectRequest> CreateRtdConnectRequestDirect(
+    ::flatbuffers::FlatBufferBuilder &_fbb,
+    int32_t topic_id = 0,
+    const std::vector<::flatbuffers::Offset<::flatbuffers::String>> *strings = nullptr,
+    bool new_values = false) {
+  auto strings__ = strings ? _fbb.CreateVector<::flatbuffers::Offset<::flatbuffers::String>>(*strings) : 0;
+  return protocol::CreateRtdConnectRequest(
+      _fbb,
+      topic_id,
+      strings__,
+      new_values);
+}
+
+struct RtdConnectResponse FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
+  typedef RtdConnectResponseBuilder Builder;
+  enum FlatBuffersVTableOffset FLATBUFFERS_VTABLE_UNDERLYING_TYPE {
+    VT_VAL = 4
+  };
+  const protocol::Any *val() const {
+    return GetPointer<const protocol::Any *>(VT_VAL);
+  }
+  bool Verify(::flatbuffers::Verifier &verifier) const {
+    return VerifyTableStart(verifier) &&
+           VerifyOffset(verifier, VT_VAL) &&
+           verifier.VerifyTable(val()) &&
+           verifier.EndTable();
+  }
+};
+
+struct RtdConnectResponseBuilder {
+  typedef RtdConnectResponse Table;
+  ::flatbuffers::FlatBufferBuilder &fbb_;
+  ::flatbuffers::uoffset_t start_;
+  void add_val(::flatbuffers::Offset<protocol::Any> val) {
+    fbb_.AddOffset(RtdConnectResponse::VT_VAL, val);
+  }
+  explicit RtdConnectResponseBuilder(::flatbuffers::FlatBufferBuilder &_fbb)
+        : fbb_(_fbb) {
+    start_ = fbb_.StartTable();
+  }
+  ::flatbuffers::Offset<RtdConnectResponse> Finish() {
+    const auto end = fbb_.EndTable(start_);
+    auto o = ::flatbuffers::Offset<RtdConnectResponse>(end);
+    return o;
+  }
+};
+
+inline ::flatbuffers::Offset<RtdConnectResponse> CreateRtdConnectResponse(
+    ::flatbuffers::FlatBufferBuilder &_fbb,
+    ::flatbuffers::Offset<protocol::Any> val = 0) {
+  RtdConnectResponseBuilder builder_(_fbb);
+  builder_.add_val(val);
+  return builder_.Finish();
+}
+
+struct RtdDisconnectRequest FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
+  typedef RtdDisconnectRequestBuilder Builder;
+  enum FlatBuffersVTableOffset FLATBUFFERS_VTABLE_UNDERLYING_TYPE {
+    VT_TOPIC_ID = 4
+  };
+  int32_t topic_id() const {
+    return GetField<int32_t>(VT_TOPIC_ID, 0);
+  }
+  bool Verify(::flatbuffers::Verifier &verifier) const {
+    return VerifyTableStart(verifier) &&
+           VerifyField<int32_t>(verifier, VT_TOPIC_ID, 4) &&
+           verifier.EndTable();
+  }
+};
+
+struct RtdDisconnectRequestBuilder {
+  typedef RtdDisconnectRequest Table;
+  ::flatbuffers::FlatBufferBuilder &fbb_;
+  ::flatbuffers::uoffset_t start_;
+  void add_topic_id(int32_t topic_id) {
+    fbb_.AddElement<int32_t>(RtdDisconnectRequest::VT_TOPIC_ID, topic_id, 0);
+  }
+  explicit RtdDisconnectRequestBuilder(::flatbuffers::FlatBufferBuilder &_fbb)
+        : fbb_(_fbb) {
+    start_ = fbb_.StartTable();
+  }
+  ::flatbuffers::Offset<RtdDisconnectRequest> Finish() {
+    const auto end = fbb_.EndTable(start_);
+    auto o = ::flatbuffers::Offset<RtdDisconnectRequest>(end);
+    return o;
+  }
+};
+
+inline ::flatbuffers::Offset<RtdDisconnectRequest> CreateRtdDisconnectRequest(
+    ::flatbuffers::FlatBufferBuilder &_fbb,
+    int32_t topic_id = 0) {
+  RtdDisconnectRequestBuilder builder_(_fbb);
+  builder_.add_topic_id(topic_id);
+  return builder_.Finish();
+}
+
+struct RtdUpdate FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
+  typedef RtdUpdateBuilder Builder;
+  enum FlatBuffersVTableOffset FLATBUFFERS_VTABLE_UNDERLYING_TYPE {
+    VT_TOPIC_ID = 4,
+    VT_VAL = 6
+  };
+  int32_t topic_id() const {
+    return GetField<int32_t>(VT_TOPIC_ID, 0);
+  }
+  const protocol::Any *val() const {
+    return GetPointer<const protocol::Any *>(VT_VAL);
+  }
+  bool Verify(::flatbuffers::Verifier &verifier) const {
+    return VerifyTableStart(verifier) &&
+           VerifyField<int32_t>(verifier, VT_TOPIC_ID, 4) &&
+           VerifyOffset(verifier, VT_VAL) &&
+           verifier.VerifyTable(val()) &&
+           verifier.EndTable();
+  }
+};
+
+struct RtdUpdateBuilder {
+  typedef RtdUpdate Table;
+  ::flatbuffers::FlatBufferBuilder &fbb_;
+  ::flatbuffers::uoffset_t start_;
+  void add_topic_id(int32_t topic_id) {
+    fbb_.AddElement<int32_t>(RtdUpdate::VT_TOPIC_ID, topic_id, 0);
+  }
+  void add_val(::flatbuffers::Offset<protocol::Any> val) {
+    fbb_.AddOffset(RtdUpdate::VT_VAL, val);
+  }
+  explicit RtdUpdateBuilder(::flatbuffers::FlatBufferBuilder &_fbb)
+        : fbb_(_fbb) {
+    start_ = fbb_.StartTable();
+  }
+  ::flatbuffers::Offset<RtdUpdate> Finish() {
+    const auto end = fbb_.EndTable(start_);
+    auto o = ::flatbuffers::Offset<RtdUpdate>(end);
+    return o;
+  }
+};
+
+inline ::flatbuffers::Offset<RtdUpdate> CreateRtdUpdate(
+    ::flatbuffers::FlatBufferBuilder &_fbb,
+    int32_t topic_id = 0,
+    ::flatbuffers::Offset<protocol::Any> val = 0) {
+  RtdUpdateBuilder builder_(_fbb);
+  builder_.add_val(val);
+  builder_.add_topic_id(topic_id);
+  return builder_.Finish();
+}
+
+struct BatchRtdUpdate FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
+  typedef BatchRtdUpdateBuilder Builder;
+  enum FlatBuffersVTableOffset FLATBUFFERS_VTABLE_UNDERLYING_TYPE {
+    VT_UPDATES = 4
+  };
+  const ::flatbuffers::Vector<::flatbuffers::Offset<protocol::RtdUpdate>> *updates() const {
+    return GetPointer<const ::flatbuffers::Vector<::flatbuffers::Offset<protocol::RtdUpdate>> *>(VT_UPDATES);
+  }
+  bool Verify(::flatbuffers::Verifier &verifier) const {
+    return VerifyTableStart(verifier) &&
+           VerifyOffset(verifier, VT_UPDATES) &&
+           verifier.VerifyVector(updates()) &&
+           verifier.VerifyVectorOfTables(updates()) &&
+           verifier.EndTable();
+  }
+};
+
+struct BatchRtdUpdateBuilder {
+  typedef BatchRtdUpdate Table;
+  ::flatbuffers::FlatBufferBuilder &fbb_;
+  ::flatbuffers::uoffset_t start_;
+  void add_updates(::flatbuffers::Offset<::flatbuffers::Vector<::flatbuffers::Offset<protocol::RtdUpdate>>> updates) {
+    fbb_.AddOffset(BatchRtdUpdate::VT_UPDATES, updates);
+  }
+  explicit BatchRtdUpdateBuilder(::flatbuffers::FlatBufferBuilder &_fbb)
+        : fbb_(_fbb) {
+    start_ = fbb_.StartTable();
+  }
+  ::flatbuffers::Offset<BatchRtdUpdate> Finish() {
+    const auto end = fbb_.EndTable(start_);
+    auto o = ::flatbuffers::Offset<BatchRtdUpdate>(end);
+    return o;
+  }
+};
+
+inline ::flatbuffers::Offset<BatchRtdUpdate> CreateBatchRtdUpdate(
+    ::flatbuffers::FlatBufferBuilder &_fbb,
+    ::flatbuffers::Offset<::flatbuffers::Vector<::flatbuffers::Offset<protocol::RtdUpdate>>> updates = 0) {
+  BatchRtdUpdateBuilder builder_(_fbb);
+  builder_.add_updates(updates);
+  return builder_.Finish();
+}
+
+inline ::flatbuffers::Offset<BatchRtdUpdate> CreateBatchRtdUpdateDirect(
+    ::flatbuffers::FlatBufferBuilder &_fbb,
+    const std::vector<::flatbuffers::Offset<protocol::RtdUpdate>> *updates = nullptr) {
+  auto updates__ = updates ? _fbb.CreateVector<::flatbuffers::Offset<protocol::RtdUpdate>>(*updates) : 0;
+  return protocol::CreateBatchRtdUpdate(
+      _fbb,
+      updates__);
 }
 
 inline bool VerifyScalarValue(::flatbuffers::Verifier &verifier, const void *obj, ScalarValue type) {
