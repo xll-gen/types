@@ -34,3 +34,10 @@ tasks:
     desc: Clean build directory
     cmds:
       - cmake -E remove_directory build
+
+  verify-go:
+    desc: Run Go vet, build, and tests on the protocol package (independent of the C++ build).
+    cmds:
+      - go vet ./...
+      - go build ./...
+      - go test -count=1 ./...

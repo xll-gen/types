@@ -67,7 +67,7 @@ FP12* NewFP12(int rows, int cols) {
     return fp;
 }
 
-extern "C" void __stdcall xlAutoFree12(LPXLOPER12 p) {
+TYPES_EXCEL_CALLBACK xlAutoFree12(LPXLOPER12 p) {
     if (!p) return;
 
     // Check if the XLOPER12 itself is marked for DLL freeing
