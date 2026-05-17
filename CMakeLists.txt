@@ -32,6 +32,16 @@ target_include_directories(xll-gen-types PUBLIC
     $<INSTALL_INTERFACE:include>
 )
 
+# On non-Windows hosts the library cannot find <windows.h>, so it pulls in
+# the test-only win_compat.h shim. v0.2.5 gated that shim behind
+# XLLGEN_TYPES_TESTING; we propagate the define here so the library (and
+# anything linking it) still builds on Linux CI. Production XLLs build on
+# Windows where _WIN32 is set and the shim path is skipped entirely, so
+# this define is a no-op there.
+if(NOT WIN32)
+    target_compile_definitions(xll-gen-types PUBLIC XLLGEN_TYPES_TESTING)
+endif()
+
 # Link dependencies
 target_link_libraries(xll-gen-types PUBLIC flatbuffers)
 

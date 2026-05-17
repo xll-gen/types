@@ -37,3 +37,12 @@ add_executable(utility_test test_utility.cpp)
 target_link_libraries(utility_test PRIVATE xll-gen-types)
 target_include_directories(utility_test PRIVATE ${CMAKE_SOURCE_DIR}/include)
 add_test(NAME utility_test COMMAND utility_test)
+
+# v0.2.6: comprehensive XLOPER12 <-> FlatBuffer round-trip suite. One test
+# case per converter (Scalar/Grid/NumGrid/Range/Any), exercising NaN/Inf,
+# INT_MIN/MAX, empty grids and non-ASCII UTF-16 strings. Closes the last
+# open item in AGENTS.md "Known Improvement Backlog".
+add_executable(roundtrip_test test_roundtrip.cpp)
+target_link_libraries(roundtrip_test PRIVATE xll-gen-types)
+target_include_directories(roundtrip_test PRIVATE ${CMAKE_SOURCE_DIR}/include)
+add_test(NAME roundtrip_test COMMAND roundtrip_test)
