@@ -10,7 +10,8 @@ func (rcv *Scalar) Clone() *Scalar {
 	if rcv == nil {
 		return nil
 	}
-	b := flatbuffers.NewBuilder(0)
+	b := acquireBuilder()
+	defer releaseBuilder(b)
 	off := rcv.DeepCopy(b)
 	b.Finish(off)
 	buf := b.FinishedBytes()
@@ -137,7 +138,8 @@ func (rcv *Grid) Clone() *Grid {
 	if rcv == nil {
 		return nil
 	}
-	b := flatbuffers.NewBuilder(0)
+	b := acquireBuilder()
+	defer releaseBuilder(b)
 	off := rcv.DeepCopy(b)
 	b.Finish(off)
 	buf := b.FinishedBytes()
@@ -192,7 +194,8 @@ func (rcv *NumGrid) Clone() *NumGrid {
 	if rcv == nil {
 		return nil
 	}
-	b := flatbuffers.NewBuilder(0)
+	b := acquireBuilder()
+	defer releaseBuilder(b)
 	off := rcv.DeepCopy(b)
 	b.Finish(off)
 	buf := b.FinishedBytes()
@@ -236,7 +239,8 @@ func (rcv *Range) Clone() *Range {
 	if rcv == nil {
 		return nil
 	}
-	b := flatbuffers.NewBuilder(0)
+	b := acquireBuilder()
+	defer releaseBuilder(b)
 	off := rcv.DeepCopy(b)
 	b.Finish(off)
 	buf := b.FinishedBytes()
@@ -301,7 +305,8 @@ func (rcv *Any) Clone() *Any {
 	if rcv == nil {
 		return nil
 	}
-	b := flatbuffers.NewBuilder(0)
+	b := acquireBuilder()
+	defer releaseBuilder(b)
 	off := rcv.DeepCopy(b)
 	b.Finish(off)
 	buf := b.FinishedBytes()
@@ -398,7 +403,8 @@ func (rcv *RtdConnectRequest) Clone() *RtdConnectRequest {
 	if rcv == nil {
 		return nil
 	}
-	b := flatbuffers.NewBuilder(0)
+	b := acquireBuilder()
+	defer releaseBuilder(b)
 	off := rcv.DeepCopy(b)
 	b.Finish(off)
 	buf := b.FinishedBytes()
@@ -447,7 +453,8 @@ func (rcv *RtdConnectResponse) Clone() *RtdConnectResponse {
 	if rcv == nil {
 		return nil
 	}
-	b := flatbuffers.NewBuilder(0)
+	b := acquireBuilder()
+	defer releaseBuilder(b)
 	off := rcv.DeepCopy(b)
 	b.Finish(off)
 	buf := b.FinishedBytes()
@@ -480,7 +487,8 @@ func (rcv *RtdDisconnectRequest) Clone() *RtdDisconnectRequest {
 	if rcv == nil {
 		return nil
 	}
-	b := flatbuffers.NewBuilder(0)
+	b := acquireBuilder()
+	defer releaseBuilder(b)
 	off := rcv.DeepCopy(b)
 	b.Finish(off)
 	buf := b.FinishedBytes()
@@ -504,7 +512,8 @@ func (rcv *RtdUpdate) Clone() *RtdUpdate {
 	if rcv == nil {
 		return nil
 	}
-	b := flatbuffers.NewBuilder(0)
+	b := acquireBuilder()
+	defer releaseBuilder(b)
 	off := rcv.DeepCopy(b)
 	b.Finish(off)
 	buf := b.FinishedBytes()
@@ -538,7 +547,8 @@ func (rcv *BatchRtdUpdate) Clone() *BatchRtdUpdate {
 	if rcv == nil {
 		return nil
 	}
-	b := flatbuffers.NewBuilder(0)
+	b := acquireBuilder()
+	defer releaseBuilder(b)
 	off := rcv.DeepCopy(b)
 	b.Finish(off)
 	buf := b.FinishedBytes()
