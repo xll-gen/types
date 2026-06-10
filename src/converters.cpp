@@ -20,17 +20,58 @@ static protocol::XlError ExcelErrorToProtocol(int err) {
     return (protocol::XlError)(err + 2000);
 }
 
+// Ownership bits that may ride on xltype without changing the logical type.
+// xlbitDLLFree marks memory we allocated (freed via xlAutoFree12), xlbitXLFree
+// marks Excel-owned memory (freed via xlFree). Every reader that switches on
+// the type of an XLOPER12 — top-level or xltypeMulti element — must mask
+// these bits first.
+static const DWORD kXlOwnerBits = (DWORD)(xlbitDLLFree | xlbitXLFree);
+
+static inline DWORD BaseXlType(const XLOPER12& op) {
+    return op.xltype & ~kXlOwnerBits;
+}
+
+// The canonical "return an error XLOPER12 to Excel" block (R5 §4.7 dedup).
+// This 4-line pattern used to be copy-pasted ~10x; security fixes
+// (BUG-014/015/017 lineage) must land here exactly once.
+static LPXLOPER12 MakeErrXLOPER12(int err) {
+    LPXLOPER12 op = NewXLOPER12();
+    op->xltype = xltypeErr | xlbitDLLFree;
+    op->val.err = err;
+    return op;
+}
+
+// Shared grid-dimension validation (R5 §4.7 dedup, BUG-015/017 history).
+// Rejects negative dimensions, a rows*cols product that would overflow
+// size_t (relevant on 32-bit x86 builds), and element counts above INT_MAX
+// (Excel's practical limit and our downstream loop assumption). On success
+// *outCount holds rows*cols. Do not weaken any individual check.
+static bool ValidateGridDims(int rows, int cols, size_t* outCount) {
+    *outCount = 0;
+    if (rows < 0 || cols < 0) return false;
+    if (cols > 0 && (size_t)rows > SIZE_MAX / (size_t)cols) return false;
+    size_t count = (size_t)rows * (size_t)cols;
+    if (count > (size_t)std::numeric_limits<int>::max()) return false;
+    *outCount = count;
+    return true;
+}
+
 flatbuffers::Offset<protocol::Scalar> ConvertScalar(const XLOPER12& cell, flatbuffers::FlatBufferBuilder& builder) {
     try {
-        if (cell.xltype == xltypeNum) {
+        // Mask xlbitDLLFree/xlbitXLFree: multi elements built by
+        // GridToXLOPER12 carry xlbitDLLFree on their string cells, and this
+        // function must still classify them correctly when such an array is
+        // converted back (round-trip / echo paths).
+        const DWORD type = BaseXlType(cell);
+        if (type == xltypeNum) {
             return protocol::CreateScalar(builder, protocol::ScalarValue::Num, protocol::CreateNum(builder, cell.val.num).Union());
-        } else if (cell.xltype == xltypeInt) {
+        } else if (type == xltypeInt) {
             return protocol::CreateScalar(builder, protocol::ScalarValue::Int, protocol::CreateInt(builder, cell.val.w).Union());
-        } else if (cell.xltype == xltypeBool) {
+        } else if (type == xltypeBool) {
             return protocol::CreateScalar(builder, protocol::ScalarValue::Bool, protocol::CreateBool(builder, cell.val.xbool).Union());
-        } else if (cell.xltype == xltypeStr) {
+        } else if (type == xltypeStr) {
             return protocol::CreateScalar(builder, protocol::ScalarValue::Str, protocol::CreateStr(builder, builder.CreateString(ConvertExcelString(cell.val.str))).Union());
-        } else if (cell.xltype == xltypeErr) {
+        } else if (type == xltypeErr) {
             return protocol::CreateScalar(builder, protocol::ScalarValue::Err, protocol::CreateErr(builder, ExcelErrorToProtocol(cell.val.err)).Union());
         } else {
             return protocol::CreateScalar(builder, protocol::ScalarValue::Nil, protocol::CreateNil(builder).Union());
@@ -42,12 +83,12 @@ flatbuffers::Offset<protocol::Scalar> ConvertScalar(const XLOPER12& cell, flatbu
 
 flatbuffers::Offset<protocol::Grid> ConvertGrid(LPXLOPER12 op, flatbuffers::FlatBufferBuilder& builder) {
     try {
-        if (op->xltype == xltypeMulti) {
+        if (BaseXlType(*op) == xltypeMulti) {
             int rows = op->val.array.rows;
             int cols = op->val.array.columns;
-            size_t count = (size_t)rows * cols;
 
-            if (rows < 0 || cols < 0 || count > (size_t)std::numeric_limits<int>::max()) {
+            size_t count = 0;
+            if (!ValidateGridDims(rows, cols, &count)) {
                 // Return empty grid on overflow or invalid dimensions
                 return protocol::CreateGrid(builder, 0, 0, 0);
             }
@@ -84,9 +125,9 @@ flatbuffers::Offset<protocol::NumGrid> ConvertNumGrid(FP12* fp, flatbuffers::Fla
         if (!fp) return protocol::CreateNumGrid(builder, 0, 0, 0);
         int rows = fp->rows;
         int cols = fp->columns;
-        size_t count = (size_t)rows * cols;
 
-        if (rows < 0 || cols < 0 || count > (size_t)std::numeric_limits<int>::max()) {
+        size_t count = 0;
+        if (!ValidateGridDims(rows, cols, &count)) {
             return protocol::CreateNumGrid(builder, 0, 0, 0);
         }
 
@@ -139,10 +180,9 @@ flatbuffers::Offset<protocol::Any> ConvertMultiToAny(const XLOPER12& op, flatbuf
         // Check if it's homogenous numbers -> NumGrid
         // Else -> Grid
         bool allNums = true;
-        size_t count = (size_t)op.val.array.rows * op.val.array.columns;
 
-        // Overflow check handled in ConvertGrid calls or here if we use count.
-        if (op.val.array.rows < 0 || op.val.array.columns < 0 || count > (size_t)std::numeric_limits<int>::max()) {
+        size_t count = 0;
+        if (!ValidateGridDims(op.val.array.rows, op.val.array.columns, &count)) {
             // Fallback to empty Grid
             return protocol::CreateAny(builder, protocol::AnyValue::Grid, protocol::CreateGrid(builder, 0, 0, 0).Union());
         }
@@ -153,7 +193,8 @@ flatbuffers::Offset<protocol::Any> ConvertMultiToAny(const XLOPER12& op, flatbuf
         }
 
         for (size_t i = 0; i < count; ++i) {
-            if (op.val.array.lparray[i].xltype != xltypeNum) {
+            // Mask ownership bits — see ConvertScalar.
+            if (BaseXlType(op.val.array.lparray[i]) != xltypeNum) {
                 allNums = false;
                 break;
             }
@@ -182,28 +223,32 @@ flatbuffers::Offset<protocol::Any> ConvertMultiToAny(const XLOPER12& op, flatbuf
 
 flatbuffers::Offset<protocol::Any> ConvertAny(LPXLOPER12 op, flatbuffers::FlatBufferBuilder& builder) {
     try {
-        if (op->xltype == xltypeNum) {
+        // Mask ownership bits so XLOPER12s produced by our own
+        // AnyToXLOPER12/GridToXLOPER12 (which carry xlbitDLLFree) classify
+        // correctly when fed back through the Excel->FlatBuffers direction.
+        const DWORD type = BaseXlType(*op);
+        if (type == xltypeNum) {
             return protocol::CreateAny(builder, protocol::AnyValue::Num,
                                        protocol::CreateNum(builder, op->val.num).Union());
-        } else if (op->xltype == xltypeInt) {
+        } else if (type == xltypeInt) {
             return protocol::CreateAny(builder, protocol::AnyValue::Int,
                                        protocol::CreateInt(builder, op->val.w).Union());
-        } else if (op->xltype == xltypeBool) {
+        } else if (type == xltypeBool) {
             return protocol::CreateAny(builder, protocol::AnyValue::Bool,
                                        protocol::CreateBool(builder, op->val.xbool).Union());
-        } else if (op->xltype == xltypeStr) {
+        } else if (type == xltypeStr) {
             return protocol::CreateAny(builder, protocol::AnyValue::Str,
                                        protocol::CreateStr(builder, builder.CreateString(ConvertExcelString(op->val.str)))
                                            .Union());
-        } else if (op->xltype == xltypeErr) {
+        } else if (type == xltypeErr) {
             return protocol::CreateAny(builder, protocol::AnyValue::Err,
                                        protocol::CreateErr(builder, ExcelErrorToProtocol(op->val.err)).Union());
-        } else if (op->xltype & (xltypeRef | xltypeSRef)) {
+        } else if (type & (xltypeRef | xltypeSRef)) {
             return protocol::CreateAny(builder, protocol::AnyValue::Range, ConvertRange(op, builder).Union());
 
-        } else if (op->xltype & xltypeMulti) {
+        } else if (type & xltypeMulti) {
             return ConvertMultiToAny(*op, builder);
-        } else if (op->xltype & (xltypeMissing | xltypeNil)) {
+        } else if (type & (xltypeMissing | xltypeNil)) {
             return protocol::CreateAny(builder, protocol::AnyValue::Nil, protocol::CreateNil(builder).Union());
         }
 
@@ -260,22 +305,16 @@ LPXLOPER12 AnyToXLOPER12(const protocol::Any* any) {
                  const protocol::NumGrid* ng = any->val_as_NumGrid();
                  int rows = ng->rows();
                  int cols = ng->cols();
-                 size_t count = (size_t)rows * cols;
 
-                 if (rows < 0 || cols < 0 || count > (size_t)std::numeric_limits<int>::max() ||
+                 size_t count = 0;
+                 if (!ValidateGridDims(rows, cols, &count) ||
                      !ng->data() || ng->data()->size() < count) {
-                     LPXLOPER12 op = NewXLOPER12();
-                     op->xltype = xltypeErr | xlbitDLLFree;
-                     op->val.err = xlerrValue;
-                     return op;
+                     return MakeErrXLOPER12(xlerrValue);
                  }
 
                  // Check for allocation overflow (size_t)
                  if (count > SIZE_MAX / sizeof(XLOPER12)) {
-                     LPXLOPER12 op = NewXLOPER12();
-                     op->xltype = xltypeErr | xlbitDLLFree;
-                     op->val.err = xlerrValue;
-                     return op;
+                     return MakeErrXLOPER12(xlerrValue);
                  }
 
                  LPXLOPER12 op = NewXLOPER12();
@@ -310,10 +349,7 @@ LPXLOPER12 AnyToXLOPER12(const protocol::Any* any) {
                     std::wstring ws = StringToWString(rc->key()->str());
                     return NewExcelString(ws);
                 }
-                LPXLOPER12 op = NewXLOPER12();
-                op->xltype = xltypeErr | xlbitDLLFree;
-                op->val.err = xlerrNA;
-                return op;
+                return MakeErrXLOPER12(xlerrNA);
             }
             case protocol::AnyValue::AsyncHandle: {
                 // Return "#ASYNC!" string to indicate handle
@@ -327,27 +363,18 @@ LPXLOPER12 AnyToXLOPER12(const protocol::Any* any) {
             }
         }
     } catch (...) {
-        LPXLOPER12 op = NewXLOPER12();
-        op->xltype = xltypeErr | xlbitDLLFree;
-        op->val.err = xlerrValue;
-        return op;
+        return MakeErrXLOPER12(xlerrValue);
     }
 }
 
 LPXLOPER12 RangeToXLOPER12(const protocol::Range* range) {
     if (!range) {
-        LPXLOPER12 op = NewXLOPER12();
-        op->xltype = xltypeErr | xlbitDLLFree;
-        op->val.err = xlerrValue;
-        return op;
+        return MakeErrXLOPER12(xlerrValue);
     }
 
     // Validate refs existence and count limits (XLOPER12 ref count is WORD/16-bit)
     if (!range->refs() || range->refs()->size() > 65535) {
-        LPXLOPER12 op = NewXLOPER12();
-        op->xltype = xltypeErr | xlbitDLLFree;
-        op->val.err = xlerrValue;
-        return op;
+        return MakeErrXLOPER12(xlerrValue);
     }
 
     try {
@@ -383,54 +410,27 @@ LPXLOPER12 RangeToXLOPER12(const protocol::Range* range) {
         guard.Dismiss();
         return op;
     } catch (...) {
-        LPXLOPER12 op = NewXLOPER12();
-        op->xltype = xltypeErr | xlbitDLLFree;
-        op->val.err = xlerrValue;
-        return op;
+        return MakeErrXLOPER12(xlerrValue);
     }
 }
 
 LPXLOPER12 GridToXLOPER12(const protocol::Grid* grid) {
     if (!grid) {
-        LPXLOPER12 op = NewXLOPER12();
-        op->xltype = xltypeErr | xlbitDLLFree;
-        op->val.err = xlerrValue;
-        return op;
+        return MakeErrXLOPER12(xlerrValue);
     }
 
     int rows = grid->rows();
     int cols = grid->cols();
 
-    if (rows < 0 || cols < 0) {
-        LPXLOPER12 op = NewXLOPER12();
-        op->xltype = xltypeErr | xlbitDLLFree;
-        op->val.err = xlerrValue;
-        return op;
-    }
-
-    if (cols > 0 && (size_t)rows > SIZE_MAX / (size_t)cols) {
-        LPXLOPER12 op = NewXLOPER12();
-        op->xltype = xltypeErr | xlbitDLLFree;
-        op->val.err = xlerrValue;
-        return op;
-    }
-
-    size_t count = (size_t)rows * (size_t)cols;
-
-    if (count > (size_t)std::numeric_limits<int>::max() ||
+    size_t count = 0;
+    if (!ValidateGridDims(rows, cols, &count) ||
         !grid->data() || grid->data()->size() != count) {
-        LPXLOPER12 op = NewXLOPER12();
-        op->xltype = xltypeErr | xlbitDLLFree;
-        op->val.err = xlerrValue;
-        return op;
+        return MakeErrXLOPER12(xlerrValue);
     }
 
     // Check for allocation overflow (size_t)
     if (count > SIZE_MAX / sizeof(XLOPER12)) {
-         LPXLOPER12 op = NewXLOPER12();
-         op->xltype = xltypeErr | xlbitDLLFree;
-         op->val.err = xlerrValue;
-         return op;
+         return MakeErrXLOPER12(xlerrValue);
     }
 
     LPXLOPER12 op = NewXLOPER12();
@@ -438,12 +438,15 @@ LPXLOPER12 GridToXLOPER12(const protocol::Grid* grid) {
     op->val.array.rows = rows;
     op->val.array.columns = cols;
 
-    // RAII guard to clean up if exception happens or return early
+    // RAII guard to clean up if exception happens or return early.
+    // Ownership contract: only element strings carrying xlbitDLLFree were
+    // allocated by us — anything else is borrowed and must not be deleted.
     ScopeGuard guard([&]() {
         if (op->val.array.lparray) {
             for(size_t i=0; i<count; ++i) {
-                 if (op->val.array.lparray[i].xltype == xltypeStr && op->val.array.lparray[i].val.str) {
-                     delete[] op->val.array.lparray[i].val.str;
+                 XLOPER12& elem = op->val.array.lparray[i];
+                 if ((elem.xltype & xlbitDLLFree) && BaseXlType(elem) == xltypeStr && elem.val.str) {
+                     delete[] elem.val.str;
                  }
             }
             delete[] op->val.array.lparray;
@@ -474,7 +477,14 @@ LPXLOPER12 GridToXLOPER12(const protocol::Grid* grid) {
                     cell.val.xbool = scalar->val_as_Bool()->val();
                     break;
                 case protocol::ScalarValue::Str: {
-                    cell.xltype = xltypeStr;
+                    // xlbitDLLFree on the element marks the string as
+                    // DLL-owned: xlAutoFree12 (and the guard above) only
+                    // delete[] element strings carrying this bit. Excel
+                    // ignores the bit on inner elements, so it is purely
+                    // our ownership marker; our own readers (ConvertScalar,
+                    // ConvertMultiToAny, ConvertAny) mask it before type
+                    // dispatch.
+                    cell.xltype = xltypeStr | xlbitDLLFree;
                     const auto* fbStr = scalar->val_as_Str()->val();
                     const char* utf8 = fbStr ? fbStr->c_str() : nullptr;
                     Utf8ToExcelString(utf8, cell.val.str);
@@ -489,10 +499,7 @@ LPXLOPER12 GridToXLOPER12(const protocol::Grid* grid) {
             }
         }
     } catch (...) {
-        LPXLOPER12 op = NewXLOPER12();
-        op->xltype = xltypeErr | xlbitDLLFree;
-        op->val.err = xlerrValue;
-        return op;
+        return MakeErrXLOPER12(xlerrValue);
     }
 
     guard.Dismiss();
@@ -505,17 +512,8 @@ FP12* NumGridToFP12(const protocol::NumGrid* grid) {
         int rows = grid->rows();
         int cols = grid->cols();
 
-        if (rows < 0 || cols < 0) {
-            return NewFP12(0, 0);
-        }
-
-        if (cols > 0 && (size_t)rows > SIZE_MAX / (size_t)cols) {
-            return NewFP12(0, 0);
-        }
-
-        size_t count = (size_t)rows * (size_t)cols;
-
-        if (count > (size_t)std::numeric_limits<int>::max() ||
+        size_t count = 0;
+        if (!ValidateGridDims(rows, cols, &count) ||
             !grid->data() || grid->data()->size() != count) {
             // Return 0x0
             return NewFP12(0, 0);

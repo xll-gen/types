@@ -79,7 +79,7 @@ void TestGridStringOversize() {
         // It should be a Multi containing a Str
         if ((op->xltype & ~(xlbitDLLFree | xlbitXLFree)) == xltypeMulti) {
              LPXLOPER12 cell = op->val.array.lparray; // 0,0
-             if (cell && (cell->xltype == xltypeStr)) {
+             if (cell && ((cell->xltype & ~(xlbitDLLFree | xlbitXLFree)) == xltypeStr)) {
                  int len = (int)cell->val.str[0];
                  std::cout << "String length returned: " << len << std::endl;
                  // With strict clamping and MultiByteToWideChar behavior,

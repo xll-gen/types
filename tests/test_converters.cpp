@@ -149,7 +149,9 @@ void TestGridConversion() {
     assert(res->val.array.lparray[0].xltype == xltypeNum);
     assert(res->val.array.lparray[0].val.num == 1.23);
 
-    assert(res->val.array.lparray[1].xltype == xltypeStr);
+    // String elements we allocate carry xlbitDLLFree (ownership marker for
+    // xlAutoFree12); non-heap elements (Num above) stay unmarked.
+    assert(res->val.array.lparray[1].xltype == (xltypeStr | xlbitDLLFree));
     assert(res->val.array.lparray[1].val.str[0] == 4);
 
     xlAutoFree12(res);

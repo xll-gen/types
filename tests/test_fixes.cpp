@@ -52,7 +52,8 @@ void TestTruncationFix() {
     assert(res->val.array.columns == 1);
 
     LPXLOPER12 cell = &res->val.array.lparray[0];
-    assert(cell->xltype == xltypeStr);
+    // DLL-allocated element strings carry xlbitDLLFree (ownership marker).
+    assert(cell->xltype == (xltypeStr | xlbitDLLFree));
 
     // Check length is truncated to 32767
     assert(cell->val.str[0] == 32767);

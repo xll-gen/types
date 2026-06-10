@@ -404,7 +404,9 @@ static void TestGrid_2x2_Mixed() {
     RT_CHECK(BitEqualDouble(out->val.array.lparray[1].val.num, 2.5));
     RT_CHECK_EQ(out->val.array.lparray[2].xltype, static_cast<DWORD>(xltypeBool));
     RT_CHECK(out->val.array.lparray[2].val.xbool != 0);
-    RT_CHECK_EQ(out->val.array.lparray[3].xltype, static_cast<DWORD>(xltypeStr));
+    // Element strings allocated by GridToXLOPER12 carry xlbitDLLFree.
+    RT_CHECK_EQ(out->val.array.lparray[3].xltype,
+                static_cast<DWORD>(xltypeStr | xlbitDLLFree));
     RT_CHECK(out->val.array.lparray[3].val.str != nullptr);
     if (out->val.array.lparray[3].val.str) {
         RT_CHECK_EQ(static_cast<int>(out->val.array.lparray[3].val.str[0]), 2);
@@ -696,7 +698,8 @@ static void TestAny_Variant_Grid_Mixed() {
     RT_CHECK_EQ(out->val.array.columns, 1);
     RT_CHECK_EQ(out->val.array.lparray[0].xltype, static_cast<DWORD>(xltypeNum));
     RT_CHECK(BitEqualDouble(out->val.array.lparray[0].val.num, 1.0));
-    RT_CHECK_EQ(out->val.array.lparray[1].xltype, static_cast<DWORD>(xltypeStr));
+    RT_CHECK_EQ(out->val.array.lparray[1].xltype,
+                static_cast<DWORD>(xltypeStr | xlbitDLLFree));
     delete[] cells[1].val.str;
     xlAutoFree12(out);
 }
@@ -762,6 +765,121 @@ static void TestAny_Variant_Range() {
 }
 
 // ----------------------------------------------------------------------------
+// xltypeMulti element-string ownership (xlbitDLLFree contract).
+//
+// GridToXLOPER12 marks every element string it allocates with xlbitDLLFree;
+// xlAutoFree12 (and GridToXLOPER12's internal ScopeGuard) only delete[]
+// element strings carrying that bit. Elements without the bit are borrowed
+// and must be left alone.
+
+static void TestMulti_OwnedStrings_CarryDLLFreeBit() {
+    // Mixed grid (num + string) built by GridToXLOPER12: the string element
+    // must carry xlbitDLLFree, the num element must not. Freeing via
+    // xlAutoFree12 must reclaim the marked string and the array without
+    // crashing.
+    flatbuffers::FlatBufferBuilder builder;
+    std::vector<flatbuffers::Offset<protocol::Scalar>> elems;
+    elems.push_back(protocol::CreateScalar(
+        builder, protocol::ScalarValue::Num,
+        protocol::CreateNum(builder, 1.5).Union()));
+    elems.push_back(protocol::CreateScalar(
+        builder, protocol::ScalarValue::Str,
+        protocol::CreateStr(builder, builder.CreateString("owned")).Union()));
+    auto vec = builder.CreateVector(elems);
+    auto gridOff = protocol::CreateGrid(builder, 1, 2, vec);
+    builder.Finish(gridOff);
+    auto* grid = flatbuffers::GetRoot<protocol::Grid>(builder.GetBufferPointer());
+
+    LPXLOPER12 out = GridToXLOPER12(grid);
+    RT_CHECK_EQ(CoreType(*out), static_cast<DWORD>(xltypeMulti));
+    RT_CHECK_EQ(out->val.array.lparray[0].xltype, static_cast<DWORD>(xltypeNum));
+    RT_CHECK_EQ(out->val.array.lparray[1].xltype,
+                static_cast<DWORD>(xltypeStr | xlbitDLLFree));
+    RT_CHECK(out->val.array.lparray[1].val.str != nullptr);
+    xlAutoFree12(out);
+}
+
+static void TestMulti_NonOwnedString_NotDeleted() {
+    // Negative test: an element string WITHOUT xlbitDLLFree (simulating an
+    // Excel-owned/aliased pointer placed into a multi cell) must NOT be
+    // delete[]'d by xlAutoFree12. Under the pre-contract implementation this
+    // called delete[] on a static buffer -> heap corruption/abort.
+    static XCHAR staticStr[] = { 2, L'h', L'i', 0 };
+
+    LPXLOPER12 op = NewXLOPER12();
+    op->xltype = xltypeMulti | xlbitDLLFree;
+    op->val.array.rows = 1;
+    op->val.array.columns = 2;
+    op->val.array.lparray = new XLOPER12[2];
+    std::memset(op->val.array.lparray, 0, 2 * sizeof(XLOPER12));
+
+    // Element 0: borrowed string — no ownership bit.
+    op->val.array.lparray[0].xltype = xltypeStr;
+    op->val.array.lparray[0].val.str = staticStr;
+
+    // Element 1: DLL-owned string, allocated and marked the same way
+    // GridToXLOPER12 does. Must be freed (leak-checked under ASan/CRT).
+    XCHAR* owned = new XCHAR[4];
+    owned[0] = 2; owned[1] = L'o'; owned[2] = L'k'; owned[3] = 0;
+    op->val.array.lparray[1].xltype = xltypeStr | xlbitDLLFree;
+    op->val.array.lparray[1].val.str = owned;
+
+    xlAutoFree12(op);  // must skip element 0, free element 1 + array
+
+    // If the static buffer had been delete[]'d the runtime would typically
+    // have aborted above; verify its contents survived as a best-effort
+    // observable check.
+    RT_CHECK_EQ(static_cast<int>(staticStr[0]), 2);
+    RT_CHECK_EQ(staticStr[1], L'h');
+    RT_CHECK_EQ(staticStr[2], L'i');
+}
+
+static void TestMulti_EchoRoundTrip_MasksOwnershipBits() {
+    // Masking audit regression: a multi produced by GridToXLOPER12 (string
+    // elements carry xlbitDLLFree) fed back through the Excel->FlatBuffers
+    // direction must classify element types correctly. Without masking in
+    // ConvertScalar/ConvertMultiToAny the string element would silently
+    // degrade to Nil and the mixed grid could be misrouted.
+    flatbuffers::FlatBufferBuilder b1;
+    std::vector<flatbuffers::Offset<protocol::Scalar>> elems;
+    elems.push_back(protocol::CreateScalar(
+        b1, protocol::ScalarValue::Num, protocol::CreateNum(b1, 2.5).Union()));
+    elems.push_back(protocol::CreateScalar(
+        b1, protocol::ScalarValue::Str,
+        protocol::CreateStr(b1, b1.CreateString("echo")).Union()));
+    auto vec1 = b1.CreateVector(elems);
+    auto gridOff = protocol::CreateGrid(b1, 1, 2, vec1);
+    b1.Finish(gridOff);
+    auto* grid1 = flatbuffers::GetRoot<protocol::Grid>(b1.GetBufferPointer());
+
+    LPXLOPER12 mid = GridToXLOPER12(grid1);
+    RT_CHECK_EQ(CoreType(*mid), static_cast<DWORD>(xltypeMulti));
+
+    // Echo leg 1: ConvertGrid -> element types must survive.
+    flatbuffers::FlatBufferBuilder b2;
+    auto off2 = ConvertGrid(mid, b2);
+    b2.Finish(off2);
+    auto* grid2 = flatbuffers::GetRoot<protocol::Grid>(b2.GetBufferPointer());
+    RT_CHECK_EQ(grid2->rows(), 1);
+    RT_CHECK_EQ(grid2->cols(), 2);
+    RT_CHECK(grid2->data()->Get(0)->val_type() == protocol::ScalarValue::Num);
+    RT_CHECK(grid2->data()->Get(1)->val_type() == protocol::ScalarValue::Str);
+    if (grid2->data()->Get(1)->val_type() == protocol::ScalarValue::Str) {
+        RT_CHECK(grid2->data()->Get(1)->val_as_Str()->val()->str() == "echo");
+    }
+
+    // Echo leg 2: ConvertAny on the (mixed) multi must route to Grid, not
+    // misclassify because of the per-element ownership bits.
+    flatbuffers::FlatBufferBuilder b3;
+    auto off3 = ConvertAny(mid, b3);
+    b3.Finish(off3);
+    auto* any = flatbuffers::GetRoot<protocol::Any>(b3.GetBufferPointer());
+    RT_CHECK(any->val_type() == protocol::AnyValue::Grid);
+
+    xlAutoFree12(mid);
+}
+
+// ----------------------------------------------------------------------------
 
 int main() {
     std::cout << "Running XLOPER12 <-> FlatBuffer round-trip suite" << std::endl;
@@ -810,6 +928,11 @@ int main() {
     RT_RUN(TestAny_Variant_Grid_Mixed);
     RT_RUN(TestAny_Variant_NumGrid_Homogenous);
     RT_RUN(TestAny_Variant_Range);
+
+    // xltypeMulti element-string ownership (xlbitDLLFree contract)
+    RT_RUN(TestMulti_OwnedStrings_CarryDLLFreeBit);
+    RT_RUN(TestMulti_NonOwnedString_NotDeleted);
+    RT_RUN(TestMulti_EchoRoundTrip_MasksOwnershipBits);
 
     if (g_failures == 0) {
         std::cout << "All round-trip tests passed." << std::endl;

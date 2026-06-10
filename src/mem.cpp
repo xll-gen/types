@@ -82,16 +82,20 @@ TYPES_EXCEL_CALLBACK xlAutoFree12(LPXLOPER12 p) {
     else if (p->xltype & xltypeMulti) {
          if (p->val.array.lparray) {
              size_t count = (size_t)p->val.array.rows * p->val.array.columns;
-             // We need to check if elements have allocated memory
-             // Note: This assumes we constructed the array.
-             // If we construct arrays, we should probably set xlbitDLLFree on string elements?
-             // But usually for xltypeMulti, we just clean up what we own.
+             // Ownership contract: an element string is only delete[]'d when
+             // the element carries xlbitDLLFree — the explicit marker set by
+             // GridToXLOPER12 (src/converters.cpp) on strings it allocates
+             // via Utf8ToExcelString. An element WITHOUT the bit (e.g. an
+             // Excel-owned or aliased pointer placed into a cell by other
+             // code) is left alone. Excel ignores xlbitDLLFree on inner
+             // elements, so the bit is purely our ownership marker; our own
+             // readers (ConvertScalar/ConvertMultiToAny/ConvertAny) mask it
+             // before type dispatch.
              for(size_t i=0; i<count; ++i) {
                  LPXLOPER12 elem = &p->val.array.lparray[i];
-                 if ((elem->xltype & xltypeStr) && elem->val.str) {
-                      // Only delete if we assume we own it.
-                      // If we are consistent, we always allocate strings for return via new[]
+                 if ((elem->xltype & xltypeStr) && (elem->xltype & xlbitDLLFree) && elem->val.str) {
                       delete[] elem->val.str;
+                      elem->val.str = nullptr;
                  }
              }
              delete[] p->val.array.lparray;
