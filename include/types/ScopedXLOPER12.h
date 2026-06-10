@@ -81,6 +81,12 @@ public:
             return;
         }
         if (op->xltype == xltypeStr) {
+            if (!op->val.str) {
+                // Malformed input (xltypeStr with null payload): degrade
+                // gracefully instead of dereferencing null.
+                m_op.xltype = xltypeMissing;
+                return;
+            }
             // Pascal string in op->val.str
             size_t len = (size_t)op->val.str[0];
             if (len > 32767) len = 32767;
