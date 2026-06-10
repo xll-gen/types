@@ -46,7 +46,18 @@ struct FP12Buffer {
     std::vector<char> data; // Stores FP12 header + doubles
 };
 
-// Keep a few buffers per thread to allow safe returns without immediate overwrites
+// Keep a few buffers per thread to allow safe returns without immediate overwrites.
+//
+// LIMITATION: this is a fixed-size per-thread ring of kRingBufferSize (8)
+// buffers. A pointer returned by NewFP12 stays valid only until the same thread
+// calls NewFP12 kRingBufferSize more times — the 9th subsequent call wraps back
+// to the same FP12Buffer and may resize-reallocate it, invalidating the older
+// pointer. This is safe for the intended usage (Excel copies each returned FP12
+// before the wrapper returns, so only a couple are live at once), but a caller
+// that holds >8 NewFP12 results simultaneously (e.g. deeply nested grid
+// building on one thread) will silently read overwritten/freed data. If that
+// pattern ever appears, switch the call site to a caller-owned allocation
+// rather than enlarging this ring.
 static const int kRingBufferSize = 8;
 thread_local int fpRingIndex = 0;
 thread_local FP12Buffer fpRingBuffers[kRingBufferSize];
