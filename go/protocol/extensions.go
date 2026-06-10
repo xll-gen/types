@@ -15,48 +15,34 @@ var (
 	ErrTooManyRefs = errors.New("too many references (> 65535)")
 )
 
-// Validate checks if the Grid dimensions match the data length.
-func (rcv *Grid) Validate() error {
-	rows := int(rcv.Rows())
-	cols := int(rcv.Cols())
-
+// validateDims checks that rows*cols is non-negative, fits in int32
+// (Excel/C++ uses int32 for the total count), and matches the data
+// vector length. Shared by Grid.Validate and NumGrid.Validate.
+func validateDims(rows, cols int32, dataLen int) error {
 	if rows < 0 || cols < 0 {
 		return fmt.Errorf("negative dimensions: %d x %d", rows, cols)
 	}
 
-	expectedCount := uint64(rcv.Rows()) * uint64(rcv.Cols())
+	expectedCount := uint64(rows) * uint64(cols)
 
-	// Check for int32 overflow as Excel/C++ uses int32 for total count
 	if expectedCount > math.MaxInt32 {
 		return fmt.Errorf("%w: count %d > MaxInt32", ErrOverflow, expectedCount)
 	}
 
-	if uint64(rcv.DataLength()) != expectedCount {
-		return fmt.Errorf("%w: expected %d, got %d", ErrInvalidDimensions, expectedCount, rcv.DataLength())
+	if uint64(dataLen) != expectedCount {
+		return fmt.Errorf("%w: expected %d, got %d", ErrInvalidDimensions, expectedCount, dataLen)
 	}
 	return nil
 }
 
+// Validate checks if the Grid dimensions match the data length.
+func (rcv *Grid) Validate() error {
+	return validateDims(rcv.Rows(), rcv.Cols(), rcv.DataLength())
+}
+
 // Validate checks if the NumGrid dimensions match the data length.
 func (rcv *NumGrid) Validate() error {
-	rows := int(rcv.Rows())
-	cols := int(rcv.Cols())
-
-	if rows < 0 || cols < 0 {
-		return fmt.Errorf("negative dimensions: %d x %d", rows, cols)
-	}
-
-	expectedCount := uint64(rcv.Rows()) * uint64(rcv.Cols())
-
-	// Check for int32 overflow as Excel/C++ uses int32 for total count
-	if expectedCount > math.MaxInt32 {
-		return fmt.Errorf("%w: count %d > MaxInt32", ErrOverflow, expectedCount)
-	}
-
-	if uint64(rcv.DataLength()) != expectedCount {
-		return fmt.Errorf("%w: expected %d, got %d", ErrInvalidDimensions, expectedCount, rcv.DataLength())
-	}
-	return nil
+	return validateDims(rcv.Rows(), rcv.Cols(), rcv.DataLength())
 }
 
 // Validate checks if the Range has valid references.
