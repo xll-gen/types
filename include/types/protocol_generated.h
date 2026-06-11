@@ -98,6 +98,12 @@ struct RtdUpdateBuilder;
 struct BatchRtdUpdate;
 struct BatchRtdUpdateBuilder;
 
+struct CommandInvokeRequest;
+struct CommandInvokeRequestBuilder;
+
+struct CommandInvokeResponse;
+struct CommandInvokeResponseBuilder;
+
 enum class XlError : int16_t {
   Null = 2000,
   Div0 = 2007,
@@ -2127,6 +2133,134 @@ inline ::flatbuffers::Offset<BatchRtdUpdate> CreateBatchRtdUpdateDirect(
   return protocol::CreateBatchRtdUpdate(
       _fbb,
       updates__);
+}
+
+struct CommandInvokeRequest FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
+  typedef CommandInvokeRequestBuilder Builder;
+  enum FlatBuffersVTableOffset FLATBUFFERS_VTABLE_UNDERLYING_TYPE {
+    VT_COMMAND_NAME = 4,
+    VT_CONTROL_ID = 6
+  };
+  const ::flatbuffers::String *command_name() const {
+    return GetPointer<const ::flatbuffers::String *>(VT_COMMAND_NAME);
+  }
+  const ::flatbuffers::String *control_id() const {
+    return GetPointer<const ::flatbuffers::String *>(VT_CONTROL_ID);
+  }
+  bool Verify(::flatbuffers::Verifier &verifier) const {
+    return VerifyTableStart(verifier) &&
+           VerifyOffset(verifier, VT_COMMAND_NAME) &&
+           verifier.VerifyString(command_name()) &&
+           VerifyOffset(verifier, VT_CONTROL_ID) &&
+           verifier.VerifyString(control_id()) &&
+           verifier.EndTable();
+  }
+};
+
+struct CommandInvokeRequestBuilder {
+  typedef CommandInvokeRequest Table;
+  ::flatbuffers::FlatBufferBuilder &fbb_;
+  ::flatbuffers::uoffset_t start_;
+  void add_command_name(::flatbuffers::Offset<::flatbuffers::String> command_name) {
+    fbb_.AddOffset(CommandInvokeRequest::VT_COMMAND_NAME, command_name);
+  }
+  void add_control_id(::flatbuffers::Offset<::flatbuffers::String> control_id) {
+    fbb_.AddOffset(CommandInvokeRequest::VT_CONTROL_ID, control_id);
+  }
+  explicit CommandInvokeRequestBuilder(::flatbuffers::FlatBufferBuilder &_fbb)
+        : fbb_(_fbb) {
+    start_ = fbb_.StartTable();
+  }
+  ::flatbuffers::Offset<CommandInvokeRequest> Finish() {
+    const auto end = fbb_.EndTable(start_);
+    auto o = ::flatbuffers::Offset<CommandInvokeRequest>(end);
+    return o;
+  }
+};
+
+inline ::flatbuffers::Offset<CommandInvokeRequest> CreateCommandInvokeRequest(
+    ::flatbuffers::FlatBufferBuilder &_fbb,
+    ::flatbuffers::Offset<::flatbuffers::String> command_name = 0,
+    ::flatbuffers::Offset<::flatbuffers::String> control_id = 0) {
+  CommandInvokeRequestBuilder builder_(_fbb);
+  builder_.add_control_id(control_id);
+  builder_.add_command_name(command_name);
+  return builder_.Finish();
+}
+
+inline ::flatbuffers::Offset<CommandInvokeRequest> CreateCommandInvokeRequestDirect(
+    ::flatbuffers::FlatBufferBuilder &_fbb,
+    const char *command_name = nullptr,
+    const char *control_id = nullptr) {
+  auto command_name__ = command_name ? _fbb.CreateString(command_name) : 0;
+  auto control_id__ = control_id ? _fbb.CreateString(control_id) : 0;
+  return protocol::CreateCommandInvokeRequest(
+      _fbb,
+      command_name__,
+      control_id__);
+}
+
+struct CommandInvokeResponse FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
+  typedef CommandInvokeResponseBuilder Builder;
+  enum FlatBuffersVTableOffset FLATBUFFERS_VTABLE_UNDERLYING_TYPE {
+    VT_OK = 4,
+    VT_ERROR = 6
+  };
+  bool ok() const {
+    return GetField<uint8_t>(VT_OK, 0) != 0;
+  }
+  const ::flatbuffers::String *error() const {
+    return GetPointer<const ::flatbuffers::String *>(VT_ERROR);
+  }
+  bool Verify(::flatbuffers::Verifier &verifier) const {
+    return VerifyTableStart(verifier) &&
+           VerifyField<uint8_t>(verifier, VT_OK, 1) &&
+           VerifyOffset(verifier, VT_ERROR) &&
+           verifier.VerifyString(error()) &&
+           verifier.EndTable();
+  }
+};
+
+struct CommandInvokeResponseBuilder {
+  typedef CommandInvokeResponse Table;
+  ::flatbuffers::FlatBufferBuilder &fbb_;
+  ::flatbuffers::uoffset_t start_;
+  void add_ok(bool ok) {
+    fbb_.AddElement<uint8_t>(CommandInvokeResponse::VT_OK, static_cast<uint8_t>(ok), 0);
+  }
+  void add_error(::flatbuffers::Offset<::flatbuffers::String> error) {
+    fbb_.AddOffset(CommandInvokeResponse::VT_ERROR, error);
+  }
+  explicit CommandInvokeResponseBuilder(::flatbuffers::FlatBufferBuilder &_fbb)
+        : fbb_(_fbb) {
+    start_ = fbb_.StartTable();
+  }
+  ::flatbuffers::Offset<CommandInvokeResponse> Finish() {
+    const auto end = fbb_.EndTable(start_);
+    auto o = ::flatbuffers::Offset<CommandInvokeResponse>(end);
+    return o;
+  }
+};
+
+inline ::flatbuffers::Offset<CommandInvokeResponse> CreateCommandInvokeResponse(
+    ::flatbuffers::FlatBufferBuilder &_fbb,
+    bool ok = false,
+    ::flatbuffers::Offset<::flatbuffers::String> error = 0) {
+  CommandInvokeResponseBuilder builder_(_fbb);
+  builder_.add_error(error);
+  builder_.add_ok(ok);
+  return builder_.Finish();
+}
+
+inline ::flatbuffers::Offset<CommandInvokeResponse> CreateCommandInvokeResponseDirect(
+    ::flatbuffers::FlatBufferBuilder &_fbb,
+    bool ok = false,
+    const char *error = nullptr) {
+  auto error__ = error ? _fbb.CreateString(error) : 0;
+  return protocol::CreateCommandInvokeResponse(
+      _fbb,
+      ok,
+      error__);
 }
 
 inline bool VerifyScalarValue(::flatbuffers::Verifier &verifier, const void *obj, ScalarValue type) {
