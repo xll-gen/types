@@ -3,6 +3,20 @@
 All notable changes to `xll-gen/types` are documented here. (File introduced
 at v0.2.9 — for earlier releases see the git tag history.)
 
+## [v0.2.10] - 2026-06-12
+
+### Added
+
+- **`ConvertRange` now populates `Range.sheet_name`** (`"[Book]Sheet"`) via
+  the thread-safe-callable `xlSheetNm`/`xlSheetId` C-API entry points — legal
+  from non-macro, `$`-registered worksheet functions (required by xll-gen
+  v0.5.0's caller/macro registration split, where `caller: true` no longer
+  registers `#`). Resolved once per `ConvertRange` call; degrades gracefully
+  to an empty name outside a live Excel calc context (e.g. unit tests).
+  Purely additive — the field was previously always empty. Excel-allocated
+  lookup results are released via `ScopedXLOPER12Result` (the v0.2.9
+  contract). New graceful-degradation tests in `tests/test_roundtrip.cpp`.
+
 ## [v0.2.9] - 2026-06-12
 
 ### Fixed

@@ -548,6 +548,84 @@ static void TestRange_Sref_SingleRect() {
     xlAutoFree12(out);
 }
 
+// Sheet-name graceful degradation. ConvertRange now resolves Range.sheet_name
+// via xlSheetNm/xlSheetId, but in the unit-test harness Excel is not bound
+// (pexcel12 == NULL, SetExcel12EntryPt is never called), so every Excel12()
+// call returns xlretFailed. The contract: the lookup must degrade to an EMPTY
+// sheet_name without crashing, and the rects + format must survive intact.
+
+static void TestRange_Sref_NoExcel_EmptySheetName() {
+    XLOPER12 in{};
+    in.xltype = xltypeSRef;
+    in.val.sref.count = 1;
+    in.val.sref.ref.rwFirst = 3;
+    in.val.sref.ref.rwLast = 4;
+    in.val.sref.ref.colFirst = 1;
+    in.val.sref.ref.colLast = 2;
+
+    flatbuffers::FlatBufferBuilder builder;
+    auto off = ConvertRange(&in, builder, "General");
+    builder.Finish(off);
+    auto* range = flatbuffers::GetRoot<protocol::Range>(builder.GetBufferPointer());
+
+    // No live Excel -> sheet_name omitted (null offset) => empty on read.
+    RT_CHECK(range->sheet_name() == nullptr ||
+             range->sheet_name()->size() == 0);
+    // Rects intact.
+    RT_CHECK(range->refs() != nullptr);
+    if (range->refs()) {
+        RT_CHECK_EQ(range->refs()->size(), 1u);
+        const auto* r = range->refs()->Get(0);
+        RT_CHECK_EQ(r->row_first(), 3);
+        RT_CHECK_EQ(r->row_last(), 4);
+        RT_CHECK_EQ(r->col_first(), 1);
+        RT_CHECK_EQ(r->col_last(), 2);
+    }
+    // Format intact.
+    RT_CHECK(range->format() != nullptr);
+    if (range->format()) {
+        RT_CHECK(range->format()->str() == "General");
+    }
+}
+
+static void TestRange_Ref_NoExcel_EmptySheetName() {
+    // Synthesize an xltypeRef with a single rect and a non-zero idSheet. Even
+    // with a plausible idSheet, xlSheetNm is unreachable in tests, so the
+    // name resolves empty and the rect survives.
+    XLMREF12 mref{};
+    mref.count = 1;
+    mref.reftbl[0].rwFirst = 10;
+    mref.reftbl[0].rwLast = 12;
+    mref.reftbl[0].colFirst = 5;
+    mref.reftbl[0].colLast = 6;
+
+    XLOPER12 in{};
+    in.xltype = xltypeRef;
+    in.val.mref.lpmref = &mref;
+    in.val.mref.idSheet = (IDSHEET)0x1234; // bogus but non-zero
+
+    flatbuffers::FlatBufferBuilder builder;
+    auto off = ConvertRange(&in, builder, "0.00");
+    builder.Finish(off);
+    auto* range = flatbuffers::GetRoot<protocol::Range>(builder.GetBufferPointer());
+
+    RT_CHECK(range->sheet_name() == nullptr ||
+             range->sheet_name()->size() == 0);
+    RT_CHECK(range->refs() != nullptr);
+    if (range->refs()) {
+        RT_CHECK_EQ(range->refs()->size(), 1u);
+        const auto* r = range->refs()->Get(0);
+        RT_CHECK_EQ(r->row_first(), 10);
+        RT_CHECK_EQ(r->row_last(), 12);
+        RT_CHECK_EQ(r->col_first(), 5);
+        RT_CHECK_EQ(r->col_last(), 6);
+    }
+    RT_CHECK(range->format() != nullptr);
+    if (range->format()) {
+        RT_CHECK(range->format()->str() == "0.00");
+    }
+}
+
 // ----------------------------------------------------------------------------
 // Any-union round-trips: confirm ConvertAny routes each xltype to the right
 // variant and AnyToXLOPER12 reconstructs it.
@@ -916,6 +994,8 @@ int main() {
 
     // Range
     RT_RUN(TestRange_Sref_SingleRect);
+    RT_RUN(TestRange_Sref_NoExcel_EmptySheetName);
+    RT_RUN(TestRange_Ref_NoExcel_EmptySheetName);
 
     // Any union variants
     RT_RUN(TestAny_Variant_Int);

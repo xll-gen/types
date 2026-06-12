@@ -2,6 +2,7 @@
 #include "types/mem.h"
 #include "types/utility.h"
 #include "types/ScopeGuard.h"
+#include "types/ScopedXLOPER12.h"
 #include <vector>
 #include <algorithm>
 #include <limits>
@@ -144,8 +145,75 @@ flatbuffers::Offset<protocol::NumGrid> ConvertNumGrid(FP12* fp, flatbuffers::Fla
     }
 }
 
+// Resolve the workbook/worksheet name ("[Book1]Sheet1") for a reference
+// XLOPER12 using only C-API entry points that are legal from non-macro,
+// thread-safe ('$'-registered) worksheet functions. xll-gen v0.5.0 makes
+// caller-aware functions non-macro by default, so xlSheetNm/xlSheetId — both
+// in the documented thread-safe-callable set — are the only sanctioned path.
+//
+// Mechanism, by reference flavour:
+//   - xltypeRef  (external reference, carries idSheet): pass `op` straight to
+//     xlSheetNm, which reads val.mref.idSheet and returns the name string.
+//   - xltypeSRef (same-sheet reference, no idSheet): first call the no-arg
+//     xlSheetId to learn the active sheet id, then hand that ref to xlSheetNm.
+//
+// Returns the name as UTF-8. On ANY failure — no live Excel (pexcel12 NULL in
+// unit tests → xlretFailed), not in a calc context, wrong return type, or an
+// exception in conversion — it degrades to an empty string. It never throws.
+// The xlSheetNm result is an Excel-allocated xltypeStr owned by Excel; the
+// ScopedXLOPER12Result wrapper releases it with xlFree on scope exit.
+static std::string LookupSheetName(LPXLOPER12 op) {
+    try {
+        if (!op) return std::string();
+
+        const DWORD baseType = BaseXlType(*op);
+
+        // The xltypeRef path can use op directly (it carries idSheet). The
+        // xltypeSRef path needs a ref-with-idSheet, which xlSheetId supplies.
+        ScopedXLOPER12Result xSheetId; // holds the xlSheetId result (xltypeRef)
+        LPXLOPER12 refForName = nullptr;
+
+        if (baseType == xltypeRef) {
+            refForName = op;
+        } else if (baseType == xltypeSRef) {
+            // No-arg xlSheetId returns an xltypeRef for the active sheet.
+            if (Excel12(xlSheetId, xSheetId, 0) != xlretSuccess) {
+                return std::string();
+            }
+            if (BaseXlType(*xSheetId.get()) != xltypeRef) {
+                return std::string();
+            }
+            refForName = xSheetId.get();
+        } else {
+            return std::string();
+        }
+
+        ScopedXLOPER12Result xName;
+        if (Excel12(xlSheetNm, xName, 1, refForName) != xlretSuccess) {
+            return std::string();
+        }
+        if (BaseXlType(*xName.get()) != xltypeStr || !xName.get()->val.str) {
+            return std::string();
+        }
+
+        // Excel returns a Pascal-style wide string ("[Book1]Sheet1").
+        std::wstring ws = PascalToWString(xName.get()->val.str);
+        return WideToUtf8(ws);
+    } catch (...) {
+        return std::string();
+    }
+    // ScopedXLOPER12Result destructors free any Excel-allocated payloads here.
+}
+
 flatbuffers::Offset<protocol::Range> ConvertRange(LPXLOPER12 op, flatbuffers::FlatBufferBuilder& builder, const std::string& format) {
     try {
+        // Resolve the sheet name once per call (not per rect). Empty on any
+        // failure / outside a live Excel calc context — purely additive, so
+        // existing consumers that never saw a populated name are unaffected.
+        std::string sheetName = LookupSheetName(op);
+        flatbuffers::Offset<flatbuffers::String> sheetOff =
+            sheetName.empty() ? 0 : builder.CreateString(sheetName);
+
         auto fmtOff = builder.CreateString(format);
 
         if (op->xltype & xltypeRef) {
@@ -157,7 +225,7 @@ flatbuffers::Offset<protocol::Range> ConvertRange(LPXLOPER12 op, flatbuffers::Fl
             }
             auto vec = builder.CreateVectorOfStructs(rects);
 
-            return protocol::CreateRange(builder, 0, vec, fmtOff);
+            return protocol::CreateRange(builder, sheetOff, vec, fmtOff);
         }
         // SRRef
         if (op->xltype & xltypeSRef) {
@@ -165,10 +233,10 @@ flatbuffers::Offset<protocol::Range> ConvertRange(LPXLOPER12 op, flatbuffers::Fl
             auto& r = op->val.sref.ref;
             rects.emplace_back(r.rwFirst, r.rwLast, r.colFirst, r.colLast);
             auto vec = builder.CreateVectorOfStructs(rects);
-            return protocol::CreateRange(builder, 0, vec, fmtOff);
+            return protocol::CreateRange(builder, sheetOff, vec, fmtOff);
         }
 
-        return protocol::CreateRange(builder, 0, 0, fmtOff);
+        return protocol::CreateRange(builder, sheetOff, 0, fmtOff);
     } catch (...) {
         return protocol::CreateRange(builder, 0, 0, 0);
     }
