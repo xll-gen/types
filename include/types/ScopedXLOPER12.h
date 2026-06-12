@@ -174,11 +174,23 @@ public:
 
 private:
     void Free() {
-        if (m_op.xltype & xlbitXLFree) {
-            // We must call xlFree to let Excel free its memory
+        // This class holds results populated by Excel12()/Excel12v(), and the
+        // SDK contract is that the CALLER releases such results with xlFree.
+        // Excel never sets xlbitXLFree on values it returns — that bit is a
+        // marker the XLL sets on its own UDF return values — so gating the
+        // free on xlbitXLFree (the previous implementation) meant this
+        // destructor never freed anything and every Excel-allocated payload
+        // (xlGetName / xlfGetCell strings, refs, arrays) leaked. Free the
+        // pointer-bearing types unconditionally; scalar types own no
+        // Excel-side memory and need no call.
+        switch (m_op.xltype & ~(xlbitXLFree | xlbitDLLFree)) {
+        case xltypeStr:
+        case xltypeMulti:
+        case xltypeRef:
             Excel12(xlFree, 0, 1, &m_op);
-            m_op.xltype = xltypeNil; // Prevent double free
+            break;
         }
+        m_op.xltype = xltypeNil; // Prevent double free
     }
 
     XLOPER12 m_op;
