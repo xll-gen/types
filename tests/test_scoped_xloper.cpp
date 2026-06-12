@@ -133,16 +133,30 @@ void TestResultAutoFree() {
     // Verify it tried to free the correct address
     // But 'res' is destroyed, so we can't check 'res' address unless we captured it.
 
-    // Do it again capturing address
+    // The actual shape of an Excel12 result: a pointer-bearing type WITHOUT
+    // xlbitXLFree (Excel never sets that bit on values it returns — it is a
+    // marker the XLL puts on its own UDF return values). This is exactly the
+    // leak the v0.2.9 Free() fix closes: it must be freed regardless of bits.
     g_xlFreeCalled = false;
     LPXLOPER12 capturedAddr = nullptr;
     {
         ScopedXLOPER12Result res;
         capturedAddr = res;
-        res->xltype = xltypeNum | xlbitXLFree;
+        res->xltype = xltypeStr;
+        res->val.str = nullptr; // Dummy
     }
     assert(g_xlFreeCalled);
     assert(g_freedOp == capturedAddr);
+
+    // Scalars own no Excel-side memory: never freed, marker bit or not.
+    g_xlFreeCalled = false;
+    {
+        ScopedXLOPER12Result res;
+        LPXLOPER12 op = res;
+        op->xltype = xltypeNum | xlbitXLFree;
+        op->val.num = 1.0;
+    }
+    assert(!g_xlFreeCalled);
 
     std::cout << "TestResultAutoFree passed" << std::endl;
 }

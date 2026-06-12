@@ -138,7 +138,10 @@ private:
 };
 
 // A helper class to manage the result XLOPER12 from Excel callbacks.
-// It automatically calls xlFree in the destructor if the XLOPER12 has the xlbitXLFree bit set.
+// The destructor releases Excel-allocated payloads (str/multi/ref) via xlFree.
+// INVARIANT: only ever store Excel12()/Excel12v() RESULT operands here. Never
+// put a DLL-allocated (xlbitDLLFree-tagged, ObjectPool/NewXLOPER12) value in a
+// Result — those must go through xlAutoFree12, not xlFree.
 class ScopedXLOPER12Result {
 public:
     ScopedXLOPER12Result() {
