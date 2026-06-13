@@ -28,12 +28,10 @@
 #include <string>
 #include <vector>
 
-#ifdef _WIN32
 #include <windows.h>
 // Some Excel symbols want a module handle even in tests; the existing
 // test_converters.cpp uses the same idiom.
 HINSTANCE g_hModule = NULL;
-#endif
 
 #include "types/converters.h"
 #include "types/mem.h"

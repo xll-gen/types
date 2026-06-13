@@ -52,11 +52,9 @@ target_link_libraries(your_target PRIVATE xll-gen-types)
 **Dependencies**:
 - **FlatBuffers**: This project depends on Google FlatBuffers. The CMake configuration handles this dependency.
 
-### Cross-Platform Support
+### Platform Support
 
-To facilitate unit testing and development on non-Windows platforms (e.g., Linux, macOS), this library includes a compatibility layer (`include/types/win_compat.h`). This layer mocks necessary Windows data types (like `DWORD`, `HANDLE`) and Excel structures (`XLOPER12`) so that the library can be compiled and tested without the Windows SDK or Excel installed.
-
-The compatibility layer is automatically included when compiling on non-Windows systems.
+This library is **Windows-only**. The C++ code targets Windows x86 / x86-64 with the Excel SDK and is built with MSVC 2019+ or MinGW (the `windows-mingw` CMake preset). All headers `#include <windows.h>` directly; there is no Linux/macOS compatibility layer (the former `win_compat.h` shim has been removed).
 
 ### API Reference
 
@@ -147,7 +145,7 @@ Header: `include/types/utility.h`
 *   `bool GetDebugFlag()`
     *   Returns the current debug logging state.
 *   `void DebugLog(const char* fmt, ...)`
-    *   Logs a formatted message to the debug output (Visual Studio Output window on Windows, stderr on other platforms) if the debug flag is enabled.
+    *   Logs a formatted message to the Windows debug output (e.g. the Visual Studio Output window / DebugView, via `OutputDebugStringA`) if the debug flag is enabled.
 
 #### Object Pool
 

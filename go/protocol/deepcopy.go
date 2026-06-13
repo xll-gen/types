@@ -171,9 +171,14 @@ func (rcv *Grid) DeepCopy(b *flatbuffers.Builder) flatbuffers.UOffsetT {
 	offsets := make([]flatbuffers.UOffsetT, l)
 	s := new(Scalar)
 	for i := 0; i < l; i++ {
-		if rcv.Data(s, i) {
-			offsets[i] = s.DeepCopy(b)
+		if !rcv.Data(s, i) {
+			// Element access failed (corrupt/truncated buffer). Fail closed
+			// rather than emitting a data vector with a null (0) offset hole,
+			// which is an invalid FlatBuffer. Matches the graceful-failure
+			// convention of the length guards above (return 0).
+			return 0
 		}
+		offsets[i] = s.DeepCopy(b)
 	}
 
 	GridStartDataVector(b, l)
@@ -280,12 +285,23 @@ func (rcv *Range) DeepCopy(b *flatbuffers.Builder) flatbuffers.UOffsetT {
 		return 0
 	}
 
-	RangeStartRefsVector(b, l)
+	// Pre-validate every Rect is accessible before opening the inline-struct
+	// vector. Refs is a vector of structs, so a mid-build access failure would
+	// leave EndVector(l) with fewer than l structs prepended and corrupt the
+	// buffer (unlike vector-of-offsets, a skipped struct cannot be back-filled
+	// with a 0 placeholder). Fail closed on the first inaccessible element,
+	// consistent with the length guards above (return 0).
 	r := new(Rect)
-	for i := l - 1; i >= 0; i-- {
-		if rcv.Refs(r, i) {
-			CreateRect(b, r.RowFirst(), r.RowLast(), r.ColFirst(), r.ColLast())
+	for i := 0; i < l; i++ {
+		if !rcv.Refs(r, i) {
+			return 0
 		}
+	}
+
+	RangeStartRefsVector(b, l)
+	for i := l - 1; i >= 0; i-- {
+		rcv.Refs(r, i)
+		CreateRect(b, r.RowFirst(), r.RowLast(), r.ColFirst(), r.ColLast())
 	}
 	refsOff := b.EndVector(l)
 
@@ -576,9 +592,13 @@ func (rcv *BatchRtdUpdate) DeepCopy(b *flatbuffers.Builder) flatbuffers.UOffsetT
 	offsets := make([]flatbuffers.UOffsetT, l)
 	u := new(RtdUpdate)
 	for i := 0; i < l; i++ {
-		if rcv.Updates(u, i) {
-			offsets[i] = u.DeepCopy(b)
+		if !rcv.Updates(u, i) {
+			// Element access failed (corrupt/truncated buffer). Fail closed
+			// rather than emitting an updates vector with a null (0) offset
+			// hole. Matches the graceful-failure convention above (return 0).
+			return 0
 		}
+		offsets[i] = u.DeepCopy(b)
 	}
 
 	BatchRtdUpdateStartUpdatesVector(b, l)

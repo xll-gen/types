@@ -1,9 +1,5 @@
 #pragma once
-#ifdef _WIN32
 #include <windows.h>
-#else
-#include "types/win_compat.h"
-#endif
 #include <string>
 #include <vector>
 #include "xlcall.h"

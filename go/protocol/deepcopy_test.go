@@ -170,6 +170,47 @@ func TestRange_Clone(t *testing.T) {
 	}
 }
 
+// TestRange_Clone_MultiRef guards the Range.DeepCopy inline-struct vector
+// build: pre-validation followed by a reverse-order prepend must preserve the
+// original Rect order across the clone. A single-ref test cannot catch an
+// ordering regression.
+func TestRange_Clone_MultiRef(t *testing.T) {
+	t.Parallel()
+	b := flatbuffers.NewBuilder(0)
+
+	name := b.CreateString("Sheet1")
+
+	// 3 distinct rects so order matters.
+	RangeStartRefsVector(b, 3)
+	CreateRect(b, 30, 31, 32, 33) // index 2 (prepended first)
+	CreateRect(b, 20, 21, 22, 23) // index 1
+	CreateRect(b, 10, 11, 12, 13) // index 0
+	refs := b.EndVector(3)
+
+	RangeStart(b)
+	RangeAddSheetName(b, name)
+	RangeAddRefs(b, refs)
+	b.Finish(RangeEnd(b))
+
+	orig := GetRootAsRange(b.FinishedBytes(), 0)
+	clone := orig.Clone()
+
+	if clone.RefsLength() != 3 {
+		t.Fatalf("Expected 3 refs, got %d", clone.RefsLength())
+	}
+	want := [3][4]int32{{10, 11, 12, 13}, {20, 21, 22, 23}, {30, 31, 32, 33}}
+	var r Rect
+	for i := 0; i < 3; i++ {
+		if !clone.Refs(&r, i) {
+			t.Fatalf("Failed to get ref %d", i)
+		}
+		got := [4]int32{r.RowFirst(), r.RowLast(), r.ColFirst(), r.ColLast()}
+		if got != want[i] {
+			t.Errorf("ref %d: got %v, want %v", i, got, want[i])
+		}
+	}
+}
+
 func TestAny_Clone(t *testing.T) {
 	t.Parallel()
 	b := flatbuffers.NewBuilder(0)

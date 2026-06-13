@@ -3,6 +3,41 @@
 All notable changes to `xll-gen/types` are documented here. (File introduced
 at v0.2.9 — for earlier releases see the git tag history.)
 
+## [v0.2.12] - 2026-06-13
+
+### Changed
+
+- **The C++ library is now Windows-only.** All non-Windows (Linux/macOS/POSIX)
+  portability support has been removed. Every header now `#include <windows.h>`
+  unconditionally; the `#ifdef _WIN32 ... #else #include "types/win_compat.h"
+  ... #endif` pattern is gone from `converters.h`, `mem.h`, `ScopedXLOPER12.h`,
+  and `utility.h`, and the matching `#ifdef`/`#else` branches in `utility.cpp`
+  (`GetXllDir`, `DebugLog`, the `__linux__` includes) and `xlcall.cpp` collapse
+  to the Windows path. Tests drop their POSIX guards likewise. Supported
+  toolchains are MSVC 2019+ and MinGW (the `windows-mingw` CMake preset).
+
+### Fixed
+
+- **`deepcopy.go` deep-copy now fails closed on inaccessible vector elements.**
+  `Grid`/`BatchRtdUpdate` return offset 0 (the existing graceful-failure
+  convention) instead of emitting a vector with a null (0) offset hole, and
+  `Range.DeepCopy` pre-validates every `Rect` before opening the inline-struct
+  vector so a mid-build access failure can no longer leave `EndVector` with a
+  short vector and corrupt the buffer. No public signature change; behavior
+  differs only on corrupt/truncated input. New regression `TestRange_Clone_MultiRef`.
+
+### Removed
+
+- **`include/types/win_compat.h` and `src/win_compat.cpp`** — the test-only
+  shim that faked `<windows.h>` for non-Windows compile validation. The
+  `XLLGEN_TYPES_TESTING` define and the `if(NOT WIN32)` branch that propagated
+  it in `CMakeLists.txt` are also removed.
+
+### Docs
+
+- `mem.h` API declarations converted to Doxygen `/** */` blocks with
+  `@param`/`@return`/`@note` tags.
+
 ## [v0.2.10] - 2026-06-12
 
 ### Added

@@ -7,11 +7,6 @@
 #include <cstring>
 #include "types/mem.h" // For TempStr12/TempInt12 if needed (actually they use thread local)
 
-#ifdef __linux__
-#include <unistd.h>
-#include <limits.h>
-#endif
-
 // Limit strings to 10MB to prevent DoS
 static const size_t MAX_STRING_SIZE = 10 * 1024 * 1024;
 
@@ -206,18 +201,6 @@ bool IsSingleCell(LPXLOPER12 pxRef) {
 }
 
 std::wstring GetXllDir() {
-#ifdef __linux__
-    char result[PATH_MAX];
-    ssize_t count = readlink("/proc/self/exe", result, PATH_MAX);
-    if (count != -1) {
-        std::string p(result, count);
-        size_t pos = p.find_last_of('/');
-        if (pos != std::string::npos) {
-            return StringToWString(p.substr(0, pos));
-        }
-    }
-    return L".";
-#else
     wchar_t path[MAX_PATH];
     if (GetModuleFileNameW(g_hModule, path, MAX_PATH) == 0) return L"";
     std::wstring p(path);
@@ -226,7 +209,6 @@ std::wstring GetXllDir() {
         return p.substr(0, pos);
     }
     return L".";
-#endif
 }
 
 // Debug Logging
@@ -249,10 +231,6 @@ void DebugLog(const char* fmt, ...) {
     vsnprintf(buffer, sizeof(buffer), fmt, args);
     va_end(args);
 
-#ifdef _WIN32
     OutputDebugStringA(buffer);
     OutputDebugStringA("\n");
-#else
-    fprintf(stderr, "[DEBUG] %s\n", buffer);
-#endif
 }

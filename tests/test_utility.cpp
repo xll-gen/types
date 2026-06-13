@@ -4,15 +4,8 @@
 #include "types/utility.h"
 #include "types/mem.h"
 
-// Mock for testing without Excel
-#ifndef _WIN32
-#include "types/win_compat.h"
-#endif
-
-#ifdef _WIN32
 #include <windows.h>
 HINSTANCE g_hModule = NULL;
-#endif
 
 void test_PascalToWString() {
     // Test 1: Null pointer

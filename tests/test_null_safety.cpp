@@ -4,10 +4,8 @@
 #include "types/converters.h"
 #include "types/mem.h"
 
-#ifdef _WIN32
 #include <windows.h>
 HINSTANCE g_hModule = NULL;
-#endif
 
 // We need to link against the library which should provide symbols.
 

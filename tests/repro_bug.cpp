@@ -5,10 +5,8 @@
 #include <exception>
 #include <limits>
 
-#ifdef _WIN32
 #include <windows.h>
 HINSTANCE g_hModule = NULL;
-#endif
 
 #include "types/converters.h"
 #include "types/mem.h"

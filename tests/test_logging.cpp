@@ -2,10 +2,8 @@
 #include <cassert>
 #include <iostream>
 
-#ifdef _WIN32
 #include <windows.h>
 HINSTANCE g_hModule = NULL;
-#endif
 
 void TestLogging() {
     // Default should be false
