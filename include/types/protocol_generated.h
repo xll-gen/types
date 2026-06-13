@@ -98,6 +98,9 @@ struct RtdUpdateBuilder;
 struct BatchRtdUpdate;
 struct BatchRtdUpdateBuilder;
 
+struct RtdOnceGridResult;
+struct RtdOnceGridResultBuilder;
+
 struct CommandInvokeRequest;
 struct CommandInvokeRequestBuilder;
 
@@ -2133,6 +2136,70 @@ inline ::flatbuffers::Offset<BatchRtdUpdate> CreateBatchRtdUpdateDirect(
   return protocol::CreateBatchRtdUpdate(
       _fbb,
       updates__);
+}
+
+struct RtdOnceGridResult FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
+  typedef RtdOnceGridResultBuilder Builder;
+  enum FlatBuffersVTableOffset FLATBUFFERS_VTABLE_UNDERLYING_TYPE {
+    VT_KEY = 4,
+    VT_VALUE = 6
+  };
+  const ::flatbuffers::String *key() const {
+    return GetPointer<const ::flatbuffers::String *>(VT_KEY);
+  }
+  const protocol::Any *value() const {
+    return GetPointer<const protocol::Any *>(VT_VALUE);
+  }
+  bool Verify(::flatbuffers::Verifier &verifier) const {
+    return VerifyTableStart(verifier) &&
+           VerifyOffset(verifier, VT_KEY) &&
+           verifier.VerifyString(key()) &&
+           VerifyOffset(verifier, VT_VALUE) &&
+           verifier.VerifyTable(value()) &&
+           verifier.EndTable();
+  }
+};
+
+struct RtdOnceGridResultBuilder {
+  typedef RtdOnceGridResult Table;
+  ::flatbuffers::FlatBufferBuilder &fbb_;
+  ::flatbuffers::uoffset_t start_;
+  void add_key(::flatbuffers::Offset<::flatbuffers::String> key) {
+    fbb_.AddOffset(RtdOnceGridResult::VT_KEY, key);
+  }
+  void add_value(::flatbuffers::Offset<protocol::Any> value) {
+    fbb_.AddOffset(RtdOnceGridResult::VT_VALUE, value);
+  }
+  explicit RtdOnceGridResultBuilder(::flatbuffers::FlatBufferBuilder &_fbb)
+        : fbb_(_fbb) {
+    start_ = fbb_.StartTable();
+  }
+  ::flatbuffers::Offset<RtdOnceGridResult> Finish() {
+    const auto end = fbb_.EndTable(start_);
+    auto o = ::flatbuffers::Offset<RtdOnceGridResult>(end);
+    return o;
+  }
+};
+
+inline ::flatbuffers::Offset<RtdOnceGridResult> CreateRtdOnceGridResult(
+    ::flatbuffers::FlatBufferBuilder &_fbb,
+    ::flatbuffers::Offset<::flatbuffers::String> key = 0,
+    ::flatbuffers::Offset<protocol::Any> value = 0) {
+  RtdOnceGridResultBuilder builder_(_fbb);
+  builder_.add_value(value);
+  builder_.add_key(key);
+  return builder_.Finish();
+}
+
+inline ::flatbuffers::Offset<RtdOnceGridResult> CreateRtdOnceGridResultDirect(
+    ::flatbuffers::FlatBufferBuilder &_fbb,
+    const char *key = nullptr,
+    ::flatbuffers::Offset<protocol::Any> value = 0) {
+  auto key__ = key ? _fbb.CreateString(key) : 0;
+  return protocol::CreateRtdOnceGridResult(
+      _fbb,
+      key__,
+      value);
 }
 
 struct CommandInvokeRequest FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
