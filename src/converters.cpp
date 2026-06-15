@@ -8,6 +8,7 @@
 #include <limits>
 #include <new>
 #include <cstring> // for std::memset
+#include <cmath>   // for std::floor
 
 
 // Excel -> FlatBuffers Converters
@@ -582,6 +583,56 @@ LPXLOPER12 GridToXLOPER12(const protocol::Grid* grid) {
 
     guard.Dismiss();
     return op;
+}
+
+// --- Value-driven date position collection ---------------------------------
+// Auto-derive a number-format from a serial's fractional part: an integer
+// serial is a pure date, anything with a fractional part carries a time.
+static std::wstring AutoDateFormat(double serial) {
+    double frac = serial - std::floor(serial);
+    return (frac == 0.0) ? L"yyyy-mm-dd" : L"yyyy-mm-dd hh:mm:ss";
+}
+
+// Prefer the explicit Date.format string if present and non-empty, otherwise
+// fall back to the serial-derived auto format.
+static std::wstring DateFormatOf(const protocol::Date* d) {
+    if (d->format() && d->format()->size() > 0) {
+        return ConvertToWString(d->format()->c_str());
+    }
+    return AutoDateFormat(d->serial());
+}
+
+void CollectDateCells(const protocol::Any* any, std::vector<DateCell>& out) {
+    if (!any) return;
+    try {
+        if (any->val_type() == protocol::AnyValue::Date) {
+            DateCell c;
+            c.rowOff = 0;
+            c.colOff = 0;
+            c.format = DateFormatOf(any->val_as_Date());
+            out.push_back(c);
+            return;
+        }
+        if (any->val_type() == protocol::AnyValue::Grid) {
+            const protocol::Grid* g = any->val_as_Grid();
+            if (!g || !g->data()) return;
+            int cols = g->cols();
+            if (cols <= 0) return;
+            const auto* data = g->data();
+            for (flatbuffers::uoffset_t i = 0; i < data->size(); ++i) {
+                const protocol::Scalar* s = data->Get(i);
+                if (s && s->val_type() == protocol::ScalarValue::Date) {
+                    DateCell c;
+                    c.rowOff = (int)(i / cols);
+                    c.colOff = (int)(i % cols);
+                    c.format = DateFormatOf(s->val_as_Date());
+                    out.push_back(c);
+                }
+            }
+        }
+    } catch (...) {
+        out.clear(); // never throw into the wrapper; collection failure => no auto-format
+    }
 }
 
 FP12* NumGridToFP12(const protocol::NumGrid* grid) {

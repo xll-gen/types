@@ -239,6 +239,85 @@ void TestGridDateCellBecomesNum() {
     std::cout << "TestGridDateCellBecomesNum passed" << std::endl;
 }
 
+void TestCollectDateCells_ScalarDate() {
+    flatbuffers::FlatBufferBuilder builder;
+    // serial 46188.0 is integer (no fractional part), format index 0 (none).
+    auto d = protocol::CreateDate(builder, 46188.0, 0);
+    auto any = protocol::CreateAny(builder, protocol::AnyValue::Date, d.Union());
+    builder.Finish(any);
+
+    auto* a = flatbuffers::GetRoot<protocol::Any>(builder.GetBufferPointer());
+    std::vector<DateCell> cells;
+    CollectDateCells(a, cells);
+
+    assert(cells.size() == 1);
+    assert(cells[0].rowOff == 0);
+    assert(cells[0].colOff == 0);
+    assert(cells[0].format == L"yyyy-mm-dd");
+    std::cout << "TestCollectDateCells_ScalarDate passed" << std::endl;
+}
+
+void TestCollectDateCells_GridColumnZeroOnly() {
+    flatbuffers::FlatBufferBuilder builder;
+    // 2x2 grid (row-major): col0 = Date cells, col1 = Num.
+    // Layout indices: [0]=date 46188, [1]=num 1.5, [2]=date 46189, [3]=num 1.5
+    std::vector<flatbuffers::Offset<protocol::Scalar>> cells;
+    cells.push_back(protocol::CreateScalar(builder, protocol::ScalarValue::Date,
+                                           protocol::CreateDate(builder, 46188.0, 0).Union()));
+    cells.push_back(protocol::CreateScalar(builder, protocol::ScalarValue::Num,
+                                           protocol::CreateNum(builder, 1.5).Union()));
+    cells.push_back(protocol::CreateScalar(builder, protocol::ScalarValue::Date,
+                                           protocol::CreateDate(builder, 46189.0, 0).Union()));
+    cells.push_back(protocol::CreateScalar(builder, protocol::ScalarValue::Num,
+                                           protocol::CreateNum(builder, 1.5).Union()));
+    auto vec = builder.CreateVector(cells);
+    auto grid = protocol::CreateGrid(builder, 2, 2, vec); // 2 rows, 2 cols
+    auto any = protocol::CreateAny(builder, protocol::AnyValue::Grid, grid.Union());
+    builder.Finish(any);
+
+    auto* a = flatbuffers::GetRoot<protocol::Any>(builder.GetBufferPointer());
+    std::vector<DateCell> out;
+    CollectDateCells(a, out);
+
+    // Only the date column (col0) yields cells: rows 0 and 1, both colOff 0.
+    assert(out.size() == 2);
+    assert(out[0].rowOff == 0 && out[0].colOff == 0);
+    assert(out[1].rowOff == 1 && out[1].colOff == 0);
+    std::cout << "TestCollectDateCells_GridColumnZeroOnly passed" << std::endl;
+}
+
+void TestCollectDateCells_DatetimeUsesDatetimeFormat() {
+    flatbuffers::FlatBufferBuilder builder;
+    // serial 46188.5 has a fractional part -> datetime auto-format.
+    auto d = protocol::CreateDate(builder, 46188.5, 0);
+    auto any = protocol::CreateAny(builder, protocol::AnyValue::Date, d.Union());
+    builder.Finish(any);
+
+    auto* a = flatbuffers::GetRoot<protocol::Any>(builder.GetBufferPointer());
+    std::vector<DateCell> cells;
+    CollectDateCells(a, cells);
+
+    assert(cells.size() == 1);
+    assert(cells[0].format == L"yyyy-mm-dd hh:mm:ss");
+    std::cout << "TestCollectDateCells_DatetimeUsesDatetimeFormat passed" << std::endl;
+}
+
+void TestCollectDateCells_NumGridHasNoDates() {
+    flatbuffers::FlatBufferBuilder builder;
+    std::vector<double> data = { 10.0, 20.0, 30.0, 40.0 };
+    auto vec = builder.CreateVector(data);
+    auto ng = protocol::CreateNumGrid(builder, 2, 2, vec);
+    auto any = protocol::CreateAny(builder, protocol::AnyValue::NumGrid, ng.Union());
+    builder.Finish(any);
+
+    auto* a = flatbuffers::GetRoot<protocol::Any>(builder.GetBufferPointer());
+    std::vector<DateCell> cells;
+    CollectDateCells(a, cells);
+
+    assert(cells.empty());
+    std::cout << "TestCollectDateCells_NumGridHasNoDates passed" << std::endl;
+}
+
 void TestNilConversion() {
     // Test converting nil/missing
     flatbuffers::FlatBufferBuilder builder;
@@ -275,6 +354,10 @@ int main() {
     TestRangeConversion();
     TestAnyDateBecomesNum();
     TestGridDateCellBecomesNum();
+    TestCollectDateCells_ScalarDate();
+    TestCollectDateCells_GridColumnZeroOnly();
+    TestCollectDateCells_DatetimeUsesDatetimeFormat();
+    TestCollectDateCells_NumGridHasNoDates();
     TestNilConversion();
     std::cout << "All tests passed!" << std::endl;
     return 0;

@@ -3,6 +3,8 @@
 #include "types/xlcall.h"
 #include "types/protocol_generated.h" // Needed for protocol:: types
 #include <flatbuffers/flatbuffers.h>
+#include <vector>
+#include <string>
 
 // Excel -> Flatbuffers
 
@@ -42,3 +44,20 @@ FP12* NumGridToFP12(const protocol::NumGrid* grid);
 
 // Helper for internal use (also exported if needed)
 flatbuffers::Offset<protocol::Any> ConvertMultiToAny(const XLOPER12& xMulti, flatbuffers::FlatBufferBuilder& builder);
+
+// A date cell's position RELATIVE to the anchor (caller top-left) plus the
+// number-format code to apply. Produced by CollectDateCells, consumed by the
+// wrapper which translates offsets to absolute cells.
+struct DateCell {
+    int rowOff;
+    int colOff;
+    std::wstring format;
+};
+
+// Walks `any` and appends one DateCell per Date value:
+//   - scalar Date           -> {0,0}
+//   - Grid with Date cells   -> one entry per Date element at its (row,col)
+//   - anything else          -> nothing (NumGrid/numeric/string carry no dates)
+// format = the Date.format field if non-empty, else auto from the serial's
+// fractional part: integer serial -> L"yyyy-mm-dd", else L"yyyy-mm-dd hh:mm:ss".
+void CollectDateCells(const protocol::Any* any, std::vector<DateCell>& out);
