@@ -19,6 +19,7 @@ const (
 	AnyValueNumGrid     AnyValue = 9
 	AnyValueRange       AnyValue = 10
 	AnyValueRefCache    AnyValue = 11
+	AnyValueDate        AnyValue = 12
 )
 
 var EnumNamesAnyValue = map[AnyValue]string{
@@ -34,6 +35,7 @@ var EnumNamesAnyValue = map[AnyValue]string{
 	AnyValueNumGrid:     "NumGrid",
 	AnyValueRange:       "Range",
 	AnyValueRefCache:    "RefCache",
+	AnyValueDate:        "Date",
 }
 
 var EnumValuesAnyValue = map[string]AnyValue{
@@ -49,6 +51,7 @@ var EnumValuesAnyValue = map[string]AnyValue{
 	"NumGrid":     AnyValueNumGrid,
 	"Range":       AnyValueRange,
 	"RefCache":    AnyValueRefCache,
+	"Date":        AnyValueDate,
 }
 
 func (v AnyValue) String() string {

@@ -15,6 +15,7 @@ const (
 	ScalarValueErr         ScalarValue = 5
 	ScalarValueAsyncHandle ScalarValue = 6
 	ScalarValueNil         ScalarValue = 7
+	ScalarValueDate        ScalarValue = 8
 )
 
 var EnumNamesScalarValue = map[ScalarValue]string{
@@ -26,6 +27,7 @@ var EnumNamesScalarValue = map[ScalarValue]string{
 	ScalarValueErr:         "Err",
 	ScalarValueAsyncHandle: "AsyncHandle",
 	ScalarValueNil:         "Nil",
+	ScalarValueDate:        "Date",
 }
 
 var EnumValuesScalarValue = map[string]ScalarValue{
@@ -37,6 +39,7 @@ var EnumValuesScalarValue = map[string]ScalarValue{
 	"Err":         ScalarValueErr,
 	"AsyncHandle": ScalarValueAsyncHandle,
 	"Nil":         ScalarValueNil,
+	"Date":        ScalarValueDate,
 }
 
 func (v ScalarValue) String() string {

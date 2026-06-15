@@ -39,6 +39,9 @@ struct NilBuilder;
 struct RefCache;
 struct RefCacheBuilder;
 
+struct Date;
+struct DateBuilder;
+
 struct Rect;
 
 struct Range;
@@ -219,11 +222,12 @@ enum class ScalarValue : uint8_t {
   Err = 5,
   AsyncHandle = 6,
   Nil = 7,
+  Date = 8,
   MIN = NONE,
-  MAX = Nil
+  MAX = Date
 };
 
-inline const ScalarValue (&EnumValuesScalarValue())[8] {
+inline const ScalarValue (&EnumValuesScalarValue())[9] {
   static const ScalarValue values[] = {
     ScalarValue::NONE,
     ScalarValue::Bool,
@@ -232,13 +236,14 @@ inline const ScalarValue (&EnumValuesScalarValue())[8] {
     ScalarValue::Str,
     ScalarValue::Err,
     ScalarValue::AsyncHandle,
-    ScalarValue::Nil
+    ScalarValue::Nil,
+    ScalarValue::Date
   };
   return values;
 }
 
 inline const char * const *EnumNamesScalarValue() {
-  static const char * const names[9] = {
+  static const char * const names[10] = {
     "NONE",
     "Bool",
     "Num",
@@ -247,13 +252,14 @@ inline const char * const *EnumNamesScalarValue() {
     "Err",
     "AsyncHandle",
     "Nil",
+    "Date",
     nullptr
   };
   return names;
 }
 
 inline const char *EnumNameScalarValue(ScalarValue e) {
-  if (::flatbuffers::IsOutRange(e, ScalarValue::NONE, ScalarValue::Nil)) return "";
+  if (::flatbuffers::IsOutRange(e, ScalarValue::NONE, ScalarValue::Date)) return "";
   const size_t index = static_cast<size_t>(e);
   return EnumNamesScalarValue()[index];
 }
@@ -290,6 +296,10 @@ template<> struct ScalarValueTraits<protocol::Nil> {
   static const ScalarValue enum_value = ScalarValue::Nil;
 };
 
+template<> struct ScalarValueTraits<protocol::Date> {
+  static const ScalarValue enum_value = ScalarValue::Date;
+};
+
 bool VerifyScalarValue(::flatbuffers::Verifier &verifier, const void *obj, ScalarValue type);
 bool VerifyScalarValueVector(::flatbuffers::Verifier &verifier, const ::flatbuffers::Vector<::flatbuffers::Offset<void>> *values, const ::flatbuffers::Vector<ScalarValue> *types);
 
@@ -306,11 +316,12 @@ enum class AnyValue : uint8_t {
   NumGrid = 9,
   Range = 10,
   RefCache = 11,
+  Date = 12,
   MIN = NONE,
-  MAX = RefCache
+  MAX = Date
 };
 
-inline const AnyValue (&EnumValuesAnyValue())[12] {
+inline const AnyValue (&EnumValuesAnyValue())[13] {
   static const AnyValue values[] = {
     AnyValue::NONE,
     AnyValue::Bool,
@@ -323,13 +334,14 @@ inline const AnyValue (&EnumValuesAnyValue())[12] {
     AnyValue::Grid,
     AnyValue::NumGrid,
     AnyValue::Range,
-    AnyValue::RefCache
+    AnyValue::RefCache,
+    AnyValue::Date
   };
   return values;
 }
 
 inline const char * const *EnumNamesAnyValue() {
-  static const char * const names[13] = {
+  static const char * const names[14] = {
     "NONE",
     "Bool",
     "Num",
@@ -342,13 +354,14 @@ inline const char * const *EnumNamesAnyValue() {
     "NumGrid",
     "Range",
     "RefCache",
+    "Date",
     nullptr
   };
   return names;
 }
 
 inline const char *EnumNameAnyValue(AnyValue e) {
-  if (::flatbuffers::IsOutRange(e, AnyValue::NONE, AnyValue::RefCache)) return "";
+  if (::flatbuffers::IsOutRange(e, AnyValue::NONE, AnyValue::Date)) return "";
   const size_t index = static_cast<size_t>(e);
   return EnumNamesAnyValue()[index];
 }
@@ -399,6 +412,10 @@ template<> struct AnyValueTraits<protocol::Range> {
 
 template<> struct AnyValueTraits<protocol::RefCache> {
   static const AnyValue enum_value = AnyValue::RefCache;
+};
+
+template<> struct AnyValueTraits<protocol::Date> {
+  static const AnyValue enum_value = AnyValue::Date;
 };
 
 bool VerifyAnyValue(::flatbuffers::Verifier &verifier, const void *obj, AnyValue type);
@@ -833,6 +850,69 @@ inline ::flatbuffers::Offset<RefCache> CreateRefCacheDirect(
       key__);
 }
 
+struct Date FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
+  typedef DateBuilder Builder;
+  enum FlatBuffersVTableOffset FLATBUFFERS_VTABLE_UNDERLYING_TYPE {
+    VT_SERIAL = 4,
+    VT_FORMAT = 6
+  };
+  double serial() const {
+    return GetField<double>(VT_SERIAL, 0.0);
+  }
+  const ::flatbuffers::String *format() const {
+    return GetPointer<const ::flatbuffers::String *>(VT_FORMAT);
+  }
+  bool Verify(::flatbuffers::Verifier &verifier) const {
+    return VerifyTableStart(verifier) &&
+           VerifyField<double>(verifier, VT_SERIAL, 8) &&
+           VerifyOffset(verifier, VT_FORMAT) &&
+           verifier.VerifyString(format()) &&
+           verifier.EndTable();
+  }
+};
+
+struct DateBuilder {
+  typedef Date Table;
+  ::flatbuffers::FlatBufferBuilder &fbb_;
+  ::flatbuffers::uoffset_t start_;
+  void add_serial(double serial) {
+    fbb_.AddElement<double>(Date::VT_SERIAL, serial, 0.0);
+  }
+  void add_format(::flatbuffers::Offset<::flatbuffers::String> format) {
+    fbb_.AddOffset(Date::VT_FORMAT, format);
+  }
+  explicit DateBuilder(::flatbuffers::FlatBufferBuilder &_fbb)
+        : fbb_(_fbb) {
+    start_ = fbb_.StartTable();
+  }
+  ::flatbuffers::Offset<Date> Finish() {
+    const auto end = fbb_.EndTable(start_);
+    auto o = ::flatbuffers::Offset<Date>(end);
+    return o;
+  }
+};
+
+inline ::flatbuffers::Offset<Date> CreateDate(
+    ::flatbuffers::FlatBufferBuilder &_fbb,
+    double serial = 0.0,
+    ::flatbuffers::Offset<::flatbuffers::String> format = 0) {
+  DateBuilder builder_(_fbb);
+  builder_.add_serial(serial);
+  builder_.add_format(format);
+  return builder_.Finish();
+}
+
+inline ::flatbuffers::Offset<Date> CreateDateDirect(
+    ::flatbuffers::FlatBufferBuilder &_fbb,
+    double serial = 0.0,
+    const char *format = nullptr) {
+  auto format__ = format ? _fbb.CreateString(format) : 0;
+  return protocol::CreateDate(
+      _fbb,
+      serial,
+      format__);
+}
+
 struct Range FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
   typedef RangeBuilder Builder;
   enum FlatBuffersVTableOffset FLATBUFFERS_VTABLE_UNDERLYING_TYPE {
@@ -946,6 +1026,9 @@ struct Scalar FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
   const protocol::Nil *val_as_Nil() const {
     return val_type() == protocol::ScalarValue::Nil ? static_cast<const protocol::Nil *>(val()) : nullptr;
   }
+  const protocol::Date *val_as_Date() const {
+    return val_type() == protocol::ScalarValue::Date ? static_cast<const protocol::Date *>(val()) : nullptr;
+  }
   bool Verify(::flatbuffers::Verifier &verifier) const {
     return VerifyTableStart(verifier) &&
            VerifyField<uint8_t>(verifier, VT_VAL_TYPE, 1) &&
@@ -981,6 +1064,10 @@ template<> inline const protocol::AsyncHandle *Scalar::val_as<protocol::AsyncHan
 
 template<> inline const protocol::Nil *Scalar::val_as<protocol::Nil>() const {
   return val_as_Nil();
+}
+
+template<> inline const protocol::Date *Scalar::val_as<protocol::Date>() const {
+  return val_as_Date();
 }
 
 struct ScalarBuilder {
@@ -1211,6 +1298,9 @@ struct Any FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
   const protocol::RefCache *val_as_RefCache() const {
     return val_type() == protocol::AnyValue::RefCache ? static_cast<const protocol::RefCache *>(val()) : nullptr;
   }
+  const protocol::Date *val_as_Date() const {
+    return val_type() == protocol::AnyValue::Date ? static_cast<const protocol::Date *>(val()) : nullptr;
+  }
   bool Verify(::flatbuffers::Verifier &verifier) const {
     return VerifyTableStart(verifier) &&
            VerifyField<uint8_t>(verifier, VT_VAL_TYPE, 1) &&
@@ -1262,6 +1352,10 @@ template<> inline const protocol::Range *Any::val_as<protocol::Range>() const {
 
 template<> inline const protocol::RefCache *Any::val_as<protocol::RefCache>() const {
   return val_as_RefCache();
+}
+
+template<> inline const protocol::Date *Any::val_as<protocol::Date>() const {
+  return val_as_Date();
 }
 
 struct AnyBuilder {
@@ -2363,6 +2457,10 @@ inline bool VerifyScalarValue(::flatbuffers::Verifier &verifier, const void *obj
       auto ptr = reinterpret_cast<const protocol::Nil *>(obj);
       return verifier.VerifyTable(ptr);
     }
+    case ScalarValue::Date: {
+      auto ptr = reinterpret_cast<const protocol::Date *>(obj);
+      return verifier.VerifyTable(ptr);
+    }
     default: return true;
   }
 }
@@ -2426,6 +2524,10 @@ inline bool VerifyAnyValue(::flatbuffers::Verifier &verifier, const void *obj, A
     }
     case AnyValue::RefCache: {
       auto ptr = reinterpret_cast<const protocol::RefCache *>(obj);
+      return verifier.VerifyTable(ptr);
+    }
+    case AnyValue::Date: {
+      auto ptr = reinterpret_cast<const protocol::Date *>(obj);
       return verifier.VerifyTable(ptr);
     }
     default: return true;
