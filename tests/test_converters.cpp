@@ -318,6 +318,38 @@ void TestCollectDateCells_NumGridHasNoDates() {
     std::cout << "TestCollectDateCells_NumGridHasNoDates passed" << std::endl;
 }
 
+void TestCollectDateCells_GridOverloadDirect() {
+    // Same 2x2 grid as TestCollectDateCells_GridColumnZeroOnly, but built as a
+    // bare Grid (no Any wrapper) and passed to the Grid overload directly —
+    // mirrors the sync grid-return wrapper path.
+    flatbuffers::FlatBufferBuilder builder;
+    std::vector<flatbuffers::Offset<protocol::Scalar>> cells;
+    cells.push_back(protocol::CreateScalar(builder, protocol::ScalarValue::Date,
+                                           protocol::CreateDate(builder, 46188.0, 0).Union()));
+    cells.push_back(protocol::CreateScalar(builder, protocol::ScalarValue::Num,
+                                           protocol::CreateNum(builder, 1.5).Union()));
+    cells.push_back(protocol::CreateScalar(builder, protocol::ScalarValue::Date,
+                                           protocol::CreateDate(builder, 46189.0, 0).Union()));
+    cells.push_back(protocol::CreateScalar(builder, protocol::ScalarValue::Num,
+                                           protocol::CreateNum(builder, 1.5).Union()));
+    auto vec = builder.CreateVector(cells);
+    auto grid = protocol::CreateGrid(builder, 2, 2, vec);
+    builder.Finish(grid);
+
+    auto* g = flatbuffers::GetRoot<protocol::Grid>(builder.GetBufferPointer());
+    std::vector<DateCell> out;
+    CollectDateCells(g, out);
+
+    assert(out.size() == 2);
+    assert(out[0].rowOff == 0 && out[0].colOff == 0);
+    assert(out[1].rowOff == 1 && out[1].colOff == 0);
+
+    std::vector<DateCell> none;
+    CollectDateCells((const protocol::Grid*)nullptr, none);
+    assert(none.empty());
+    std::cout << "TestCollectDateCells_GridOverloadDirect passed" << std::endl;
+}
+
 void TestNilConversion() {
     // Test converting nil/missing
     flatbuffers::FlatBufferBuilder builder;
@@ -358,6 +390,7 @@ int main() {
     TestCollectDateCells_GridColumnZeroOnly();
     TestCollectDateCells_DatetimeUsesDatetimeFormat();
     TestCollectDateCells_NumGridHasNoDates();
+    TestCollectDateCells_GridOverloadDirect();
     TestNilConversion();
     std::cout << "All tests passed!" << std::endl;
     return 0;

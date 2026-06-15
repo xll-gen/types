@@ -61,3 +61,9 @@ struct DateCell {
 // format = the Date.format field if non-empty, else auto from the serial's
 // fractional part: integer serial -> L"yyyy-mm-dd", else L"yyyy-mm-dd hh:mm:ss".
 void CollectDateCells(const protocol::Any* any, std::vector<DateCell>& out);
+
+// Grid overload: appends one DateCell per Date element of `grid` at its
+// (row,col) offset, with the same format derivation as above. Used by sync
+// grid-return wrappers that hold a bare protocol::Grid (no Any wrapper).
+// Null/empty/zero-col grids append nothing.
+void CollectDateCells(const protocol::Grid* grid, std::vector<DateCell>& out);

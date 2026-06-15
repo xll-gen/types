@@ -614,20 +614,27 @@ void CollectDateCells(const protocol::Any* any, std::vector<DateCell>& out) {
             return;
         }
         if (any->val_type() == protocol::AnyValue::Grid) {
-            const protocol::Grid* g = any->val_as_Grid();
-            if (!g || !g->data()) return;
-            int cols = g->cols();
-            if (cols <= 0) return;
-            const auto* data = g->data();
-            for (flatbuffers::uoffset_t i = 0; i < data->size(); ++i) {
-                const protocol::Scalar* s = data->Get(i);
-                if (s && s->val_type() == protocol::ScalarValue::Date) {
-                    DateCell c;
-                    c.rowOff = (int)(i / cols);
-                    c.colOff = (int)(i % cols);
-                    c.format = DateFormatOf(s->val_as_Date());
-                    out.push_back(c);
-                }
+            CollectDateCells(any->val_as_Grid(), out);
+        }
+    } catch (...) {
+        out.clear(); // never throw into the wrapper; collection failure => no auto-format
+    }
+}
+
+void CollectDateCells(const protocol::Grid* g, std::vector<DateCell>& out) {
+    if (!g || !g->data()) return;
+    try {
+        int cols = g->cols();
+        if (cols <= 0) return;
+        const auto* data = g->data();
+        for (flatbuffers::uoffset_t i = 0; i < data->size(); ++i) {
+            const protocol::Scalar* s = data->Get(i);
+            if (s && s->val_type() == protocol::ScalarValue::Date) {
+                DateCell c;
+                c.rowOff = (int)(i / cols);
+                c.colOff = (int)(i % cols);
+                c.format = DateFormatOf(s->val_as_Date());
+                out.push_back(c);
             }
         }
     } catch (...) {
