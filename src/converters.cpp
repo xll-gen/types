@@ -344,6 +344,12 @@ LPXLOPER12 AnyToXLOPER12(const protocol::Any* any) {
                 op->val.num = any->val_as_Num()->val();
                 return op;
             }
+            case protocol::AnyValue::Date: {
+                LPXLOPER12 op = NewXLOPER12();
+                op->xltype = xltypeNum | xlbitDLLFree;
+                op->val.num = any->val_as_Date()->serial();
+                return op;
+            }
             case protocol::AnyValue::Int: {
                 LPXLOPER12 op = NewXLOPER12();
                 op->xltype = xltypeInt | xlbitDLLFree;
@@ -535,6 +541,10 @@ LPXLOPER12 GridToXLOPER12(const protocol::Grid* grid) {
                 case protocol::ScalarValue::Num:
                     cell.xltype = xltypeNum;
                     cell.val.num = scalar->val_as_Num()->val();
+                    break;
+                case protocol::ScalarValue::Date:
+                    cell.xltype = xltypeNum;
+                    cell.val.num = scalar->val_as_Date()->serial();
                     break;
                 case protocol::ScalarValue::Int:
                     cell.xltype = xltypeInt;

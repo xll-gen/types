@@ -201,6 +201,44 @@ void TestRangeConversion() {
     std::cout << "TestRangeConversion passed" << std::endl;
 }
 
+void TestAnyDateBecomesNum() {
+    flatbuffers::FlatBufferBuilder builder;
+    auto d = protocol::CreateDate(builder, 46188.5 /*serial*/, 0 /*format*/);
+    auto any = protocol::CreateAny(builder, protocol::AnyValue::Date, d.Union());
+    builder.Finish(any);
+
+    auto* a = flatbuffers::GetRoot<protocol::Any>(builder.GetBufferPointer());
+    assert(a->val_type() == protocol::AnyValue::Date);
+
+    LPXLOPER12 op = AnyToXLOPER12(a);
+    assert(op != nullptr);
+    assert((op->xltype & ~(xlbitDLLFree | xlbitXLFree)) == (DWORD)xltypeNum);
+    assert(op->val.num == 46188.5);
+
+    xlAutoFree12(op);
+    std::cout << "TestAnyDateBecomesNum passed" << std::endl;
+}
+
+void TestGridDateCellBecomesNum() {
+    flatbuffers::FlatBufferBuilder builder;
+    auto d = protocol::CreateDate(builder, 46188.0, 0);
+    auto cell = protocol::CreateScalar(builder, protocol::ScalarValue::Date, d.Union());
+    std::vector<flatbuffers::Offset<protocol::Scalar>> cells{cell};
+    auto vec = builder.CreateVector(cells);
+    auto grid = protocol::CreateGrid(builder, 1, 1, vec);
+    builder.Finish(grid);
+
+    auto* g = flatbuffers::GetRoot<protocol::Grid>(builder.GetBufferPointer());
+    LPXLOPER12 op = GridToXLOPER12(g);
+    assert(op != nullptr);
+    assert((op->xltype & ~(xlbitDLLFree | xlbitXLFree)) == (DWORD)xltypeMulti);
+    assert(op->val.array.lparray[0].xltype == (DWORD)xltypeNum);
+    assert(op->val.array.lparray[0].val.num == 46188.0);
+
+    xlAutoFree12(op);
+    std::cout << "TestGridDateCellBecomesNum passed" << std::endl;
+}
+
 void TestNilConversion() {
     // Test converting nil/missing
     flatbuffers::FlatBufferBuilder builder;
@@ -235,6 +273,8 @@ int main() {
     TestGridConversion();
     TestNumGridConversion();
     TestRangeConversion();
+    TestAnyDateBecomesNum();
+    TestGridDateCellBecomesNum();
     TestNilConversion();
     std::cout << "All tests passed!" << std::endl;
     return 0;
