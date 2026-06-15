@@ -200,6 +200,28 @@ bool IsSingleCell(LPXLOPER12 pxRef) {
     return false;
 }
 
+bool IsDateLikeFormat(const std::wstring& fmt) {
+    bool inQuote = false;
+    bool inBracket = false;
+    for (size_t i = 0; i < fmt.size(); ++i) {
+        wchar_t c = fmt[i];
+        if (inQuote) { if (c == L'"') inQuote = false; continue; }
+        if (inBracket) { if (c == L']') inBracket = false; continue; }
+        switch (c) {
+            case L'"': inQuote = true; break;
+            case L'[': inBracket = true; break;
+            case L'\\': ++i; break; // escaped next char is a literal
+            case L'y': case L'Y':
+            case L'm': case L'M':
+            case L'd': case L'D':
+            case L'h': case L'H':
+            case L's': case L'S':
+                return true;
+        }
+    }
+    return false;
+}
+
 std::wstring GetXllDir() {
     wchar_t path[MAX_PATH];
     if (GetModuleFileNameW(g_hModule, path, MAX_PATH) == 0) return L"";

@@ -24,6 +24,13 @@ void Utf8ToExcelString(const char* utf8, XCHAR*& outStr);
 // Cell Helper
 bool IsSingleCell(LPXLOPER12 pxRef);
 
+// True if a number-format code displays its value as a date/time, i.e. it
+// contains an unescaped date/time token (y/m/d/h/s) outside quoted literals
+// ("...") and bracketed sections ([Red], [$-409], [h]). "General" and pure
+// numeric codes return false. Used to decide whether a date cell already has a
+// suitable format (skip) or needs the default applied.
+bool IsDateLikeFormat(const std::wstring& fmt);
+
 // Path Helper
 std::wstring GetXllDir();
 

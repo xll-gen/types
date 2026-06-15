@@ -41,9 +41,28 @@ void test_PascalToWString() {
     std::cout << "PascalToWString tests passed!" << std::endl;
 }
 
+void test_IsDateLikeFormat() {
+    // TRUE: format already displays a date/time -> caller will SKIP reformatting
+    assert(IsDateLikeFormat(L"yyyy-mm-dd"));
+    assert(IsDateLikeFormat(L"m/d/yyyy"));
+    assert(IsDateLikeFormat(L"h:mm:ss"));
+    assert(IsDateLikeFormat(L"[$-409]m/d/yy h:mm AM/PM"));
+    assert(IsDateLikeFormat(L"dd mmm yyyy"));
+
+    // FALSE: not a date/time format
+    assert(!IsDateLikeFormat(L"General"));
+    assert(!IsDateLikeFormat(L"0.00"));
+    assert(!IsDateLikeFormat(L"#,##0"));
+    assert(!IsDateLikeFormat(L"\"day\" 0")); // only 'd' is inside a quoted literal
+    assert(!IsDateLikeFormat(L""));          // empty == General
+
+    std::cout << "IsDateLikeFormat tests passed!" << std::endl;
+}
+
 int main() {
     try {
         test_PascalToWString();
+        test_IsDateLikeFormat();
     } catch (const std::exception& e) {
         std::cerr << "Test failed with exception: " << e.what() << std::endl;
         return 1;
