@@ -66,6 +66,11 @@ func (rcv *Scalar) DeepCopy(b *flatbuffers.Builder) flatbuffers.UOffsetT {
 		if rcv.Val(&t._tab) {
 			valOffset = t.DeepCopy(b)
 		}
+	case ScalarValueDate:
+		t := new(Date)
+		if rcv.Val(&t._tab) {
+			valOffset = t.DeepCopy(b)
+		}
 	}
 
 	ScalarStart(b)
@@ -131,6 +136,22 @@ func (rcv *AsyncHandle) DeepCopy(b *flatbuffers.Builder) flatbuffers.UOffsetT {
 func (rcv *Nil) DeepCopy(b *flatbuffers.Builder) flatbuffers.UOffsetT {
 	NilStart(b)
 	return NilEnd(b)
+}
+
+func (rcv *Date) DeepCopy(b *flatbuffers.Builder) flatbuffers.UOffsetT {
+	// String must be created on the builder before the table is started.
+	format := rcv.Format()
+	var formatOff flatbuffers.UOffsetT
+	if format != nil {
+		formatOff = b.CreateString(string(format))
+	}
+
+	DateStart(b)
+	DateAddSerial(b, rcv.Serial())
+	if formatOff != 0 {
+		DateAddFormat(b, formatOff)
+	}
+	return DateEnd(b)
 }
 
 // Clone creates a deep copy of the Grid.
@@ -393,6 +414,11 @@ func (rcv *Any) DeepCopy(b *flatbuffers.Builder) flatbuffers.UOffsetT {
 		}
 	case AnyValueRefCache:
 		t := new(RefCache)
+		if rcv.Val(&t._tab) {
+			valOffset = t.DeepCopy(b)
+		}
+	case AnyValueDate:
+		t := new(Date)
 		if rcv.Val(&t._tab) {
 			valOffset = t.DeepCopy(b)
 		}

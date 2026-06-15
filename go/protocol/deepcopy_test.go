@@ -244,6 +244,74 @@ func TestAny_Clone(t *testing.T) {
 	}
 }
 
+func TestAny_Clone_Date(t *testing.T) {
+	t.Parallel()
+	b := flatbuffers.NewBuilder(0)
+
+	// Create Any containing Date{serial: 46188.5, format: "yyyy-mm-dd"}
+	formatOff := b.CreateString("yyyy-mm-dd")
+	DateStart(b)
+	DateAddSerial(b, 46188.5)
+	DateAddFormat(b, formatOff)
+	dOff := DateEnd(b)
+
+	AnyStart(b)
+	AnyAddValType(b, AnyValueDate)
+	AnyAddVal(b, dOff)
+	b.Finish(AnyEnd(b))
+
+	orig := GetRootAsAny(b.FinishedBytes(), 0)
+	clone := orig.Clone()
+
+	if clone.ValType() != AnyValueDate {
+		t.Fatalf("Expected AnyValueDate, got %v", clone.ValType())
+	}
+	var d Date
+	if !clone.Val(&d._tab) {
+		t.Fatal("Failed to get Date from clone")
+	}
+	if d.Serial() != 46188.5 {
+		t.Errorf("Expected serial 46188.5, got %v", d.Serial())
+	}
+	if string(d.Format()) != "yyyy-mm-dd" {
+		t.Errorf("Expected format 'yyyy-mm-dd', got '%s'", d.Format())
+	}
+}
+
+func TestScalar_Clone_Date(t *testing.T) {
+	t.Parallel()
+	b := flatbuffers.NewBuilder(0)
+
+	// Create Scalar containing Date{serial: 46188.5, format: "yyyy-mm-dd"}
+	formatOff := b.CreateString("yyyy-mm-dd")
+	DateStart(b)
+	DateAddSerial(b, 46188.5)
+	DateAddFormat(b, formatOff)
+	dOff := DateEnd(b)
+
+	ScalarStart(b)
+	ScalarAddValType(b, ScalarValueDate)
+	ScalarAddVal(b, dOff)
+	b.Finish(ScalarEnd(b))
+
+	orig := GetRootAsScalar(b.FinishedBytes(), 0)
+	clone := orig.Clone()
+
+	if clone.ValType() != ScalarValueDate {
+		t.Fatalf("Expected ScalarValueDate, got %v", clone.ValType())
+	}
+	var d Date
+	if !clone.Val(&d._tab) {
+		t.Fatal("Failed to get Date from clone")
+	}
+	if d.Serial() != 46188.5 {
+		t.Errorf("Expected serial 46188.5, got %v", d.Serial())
+	}
+	if string(d.Format()) != "yyyy-mm-dd" {
+		t.Errorf("Expected format 'yyyy-mm-dd', got '%s'", d.Format())
+	}
+}
+
 func TestAsyncHandle_DeepCopy(t *testing.T) {
 	t.Parallel()
 	b := flatbuffers.NewBuilder(0)
