@@ -88,6 +88,8 @@ The `go/protocol/protocol.fbs` definition is the single source of truth for the 
 3.  **Generated Go**: `go/protocol/*.go` files must be regenerated via `flatc`.
 **Constraint**: Any change to `go/protocol/protocol.fbs` requires running the generation task (`task generate` or similar) to update both C++ and Go artifacts in the same commit.
 
+**Confirmed-correct note — the `Date` union member is NOT consumed by `xll-gen` generated projects (do not "remove as dead", do not assume it gates XLL date support; verified 2026-06-16):** `xll-gen` maps its `date` type to `SchemaType="double"`, so a generated XLL encodes dates as plain `double` and never references `protocol::Date`. The generated project's protocol code comes from this `types` module (pinned by version), and `xll-gen`'s template `protocol.fbs` is only a flatc parse-stub. Therefore the `Date{serial,format}` table here is currently unused by the generated-XLL path; its presence/absence in `xll-gen`'s template does not affect generated-project compilation. Keep it (it is the schema's source of truth and may back a future non-double encoding), but understand it is not on the live date-I/O path today.
+
 ### Excel Conversion Logic
 When adding support for a new type in `protocol.fbs`:
 1.  **Schema**: Update `go/protocol/protocol.fbs`.
