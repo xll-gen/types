@@ -5,20 +5,36 @@ import (
 	"math"
 )
 
-// Clone creates a deep copy of the Scalar.
-func (rcv *Scalar) Clone() *Scalar {
-	if rcv == nil {
-		return nil
-	}
+// deepCopier is implemented by every protocol table that can serialize itself
+// into a builder via DeepCopy. It lets cloneTable share the otherwise-identical
+// Clone() body across all tables.
+type deepCopier interface {
+	DeepCopy(b *flatbuffers.Builder) flatbuffers.UOffsetT
+}
+
+// cloneTable deep-copies a flatbuffers table by serializing it into a pooled
+// builder and re-rooting the finished bytes into a freshly owned buffer.
+// getRoot is the table's GetRootAs<T> constructor. Callers MUST handle the
+// nil-receiver case before calling — a typed-nil rcv would invoke DeepCopy on a
+// nil receiver. This is the single definition of the Clone() skeleton that was
+// previously copy-pasted verbatim across every table type.
+func cloneTable[T any](rcv deepCopier, getRoot func([]byte, flatbuffers.UOffsetT) *T) *T {
 	b := acquireBuilder()
 	defer releaseBuilder(b)
 	off := rcv.DeepCopy(b)
 	b.Finish(off)
 	buf := b.FinishedBytes()
-	// Create a new buffer with exact size to own the data
 	newBuf := make([]byte, len(buf))
 	copy(newBuf, buf)
-	return GetRootAsScalar(newBuf, 0)
+	return getRoot(newBuf, 0)
+}
+
+// Clone creates a deep copy of the Scalar.
+func (rcv *Scalar) Clone() *Scalar {
+	if rcv == nil {
+		return nil
+	}
+	return cloneTable(rcv, GetRootAsScalar)
 }
 
 // DeepCopy serializes the Scalar into the builder.
@@ -159,14 +175,7 @@ func (rcv *Grid) Clone() *Grid {
 	if rcv == nil {
 		return nil
 	}
-	b := acquireBuilder()
-	defer releaseBuilder(b)
-	off := rcv.DeepCopy(b)
-	b.Finish(off)
-	buf := b.FinishedBytes()
-	newBuf := make([]byte, len(buf))
-	copy(newBuf, buf)
-	return GetRootAsGrid(newBuf, 0)
+	return cloneTable(rcv, GetRootAsGrid)
 }
 
 // DeepCopy serializes the Grid into the builder.
@@ -220,14 +229,7 @@ func (rcv *NumGrid) Clone() *NumGrid {
 	if rcv == nil {
 		return nil
 	}
-	b := acquireBuilder()
-	defer releaseBuilder(b)
-	off := rcv.DeepCopy(b)
-	b.Finish(off)
-	buf := b.FinishedBytes()
-	newBuf := make([]byte, len(buf))
-	copy(newBuf, buf)
-	return GetRootAsNumGrid(newBuf, 0)
+	return cloneTable(rcv, GetRootAsNumGrid)
 }
 
 // DeepCopy serializes the NumGrid into the builder.
@@ -265,14 +267,7 @@ func (rcv *Range) Clone() *Range {
 	if rcv == nil {
 		return nil
 	}
-	b := acquireBuilder()
-	defer releaseBuilder(b)
-	off := rcv.DeepCopy(b)
-	b.Finish(off)
-	buf := b.FinishedBytes()
-	newBuf := make([]byte, len(buf))
-	copy(newBuf, buf)
-	return GetRootAsRange(newBuf, 0)
+	return cloneTable(rcv, GetRootAsRange)
 }
 
 // DeepCopy serializes the Range into the builder.
@@ -342,14 +337,7 @@ func (rcv *Any) Clone() *Any {
 	if rcv == nil {
 		return nil
 	}
-	b := acquireBuilder()
-	defer releaseBuilder(b)
-	off := rcv.DeepCopy(b)
-	b.Finish(off)
-	buf := b.FinishedBytes()
-	newBuf := make([]byte, len(buf))
-	copy(newBuf, buf)
-	return GetRootAsAny(newBuf, 0)
+	return cloneTable(rcv, GetRootAsAny)
 }
 
 // DeepCopy serializes the Any into the builder.
@@ -445,14 +433,7 @@ func (rcv *RtdConnectRequest) Clone() *RtdConnectRequest {
 	if rcv == nil {
 		return nil
 	}
-	b := acquireBuilder()
-	defer releaseBuilder(b)
-	off := rcv.DeepCopy(b)
-	b.Finish(off)
-	buf := b.FinishedBytes()
-	newBuf := make([]byte, len(buf))
-	copy(newBuf, buf)
-	return GetRootAsRtdConnectRequest(newBuf, 0)
+	return cloneTable(rcv, GetRootAsRtdConnectRequest)
 }
 
 // DeepCopy serializes the RtdConnectRequest into the builder.
@@ -495,14 +476,7 @@ func (rcv *RtdConnectResponse) Clone() *RtdConnectResponse {
 	if rcv == nil {
 		return nil
 	}
-	b := acquireBuilder()
-	defer releaseBuilder(b)
-	off := rcv.DeepCopy(b)
-	b.Finish(off)
-	buf := b.FinishedBytes()
-	newBuf := make([]byte, len(buf))
-	copy(newBuf, buf)
-	return GetRootAsRtdConnectResponse(newBuf, 0)
+	return cloneTable(rcv, GetRootAsRtdConnectResponse)
 }
 
 // DeepCopy serializes the RtdConnectResponse into the builder.
@@ -529,14 +503,7 @@ func (rcv *RtdDisconnectRequest) Clone() *RtdDisconnectRequest {
 	if rcv == nil {
 		return nil
 	}
-	b := acquireBuilder()
-	defer releaseBuilder(b)
-	off := rcv.DeepCopy(b)
-	b.Finish(off)
-	buf := b.FinishedBytes()
-	newBuf := make([]byte, len(buf))
-	copy(newBuf, buf)
-	return GetRootAsRtdDisconnectRequest(newBuf, 0)
+	return cloneTable(rcv, GetRootAsRtdDisconnectRequest)
 }
 
 // DeepCopy serializes the RtdDisconnectRequest into the builder.
@@ -554,14 +521,7 @@ func (rcv *RtdUpdate) Clone() *RtdUpdate {
 	if rcv == nil {
 		return nil
 	}
-	b := acquireBuilder()
-	defer releaseBuilder(b)
-	off := rcv.DeepCopy(b)
-	b.Finish(off)
-	buf := b.FinishedBytes()
-	newBuf := make([]byte, len(buf))
-	copy(newBuf, buf)
-	return GetRootAsRtdUpdate(newBuf, 0)
+	return cloneTable(rcv, GetRootAsRtdUpdate)
 }
 
 // DeepCopy serializes the RtdUpdate into the builder.
@@ -589,14 +549,7 @@ func (rcv *BatchRtdUpdate) Clone() *BatchRtdUpdate {
 	if rcv == nil {
 		return nil
 	}
-	b := acquireBuilder()
-	defer releaseBuilder(b)
-	off := rcv.DeepCopy(b)
-	b.Finish(off)
-	buf := b.FinishedBytes()
-	newBuf := make([]byte, len(buf))
-	copy(newBuf, buf)
-	return GetRootAsBatchRtdUpdate(newBuf, 0)
+	return cloneTable(rcv, GetRootAsBatchRtdUpdate)
 }
 
 // DeepCopy serializes the BatchRtdUpdate into the builder.
