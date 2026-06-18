@@ -78,11 +78,8 @@ FP12* NewFP12(int rows, int cols) {
     return fp;
 }
 
-TYPES_EXCEL_CALLBACK xlAutoFree12(LPXLOPER12 p) {
+void FreeDllOwnedContents(LPXLOPER12 p) {
     if (!p) return;
-
-    // Check if the XLOPER12 itself is marked for DLL freeing
-    // (Usually this function is only called if xlbitDLLFree is set on p->xltype)
 
     if (p->xltype & xltypeStr) {
         if (p->val.str) {
@@ -104,12 +101,24 @@ TYPES_EXCEL_CALLBACK xlAutoFree12(LPXLOPER12 p) {
              // before type dispatch.
              for(size_t i=0; i<count; ++i) {
                  LPXLOPER12 elem = &p->val.array.lparray[i];
-                 if ((elem->xltype & xltypeStr) && (elem->xltype & xlbitDLLFree) && elem->val.str) {
+                 // Free an element string only when its base type (owner bits
+                 // masked off) is EXACTLY xltypeStr and it carries our xlbitDLLFree
+                 // marker. The base-type compare (vs a loose `& xltypeStr` bit test)
+                 // matters because xltypeStr shares bits with composites like
+                 // xltypeBigData (= xltypeStr|xltypeInt), whose active union member
+                 // is val.bigdata, NOT val.str — a loose test would type-confuse and
+                 // delete[] the wrong pointer. No current producer emits composite
+                 // elements, but matching BaseXlType semantics here keeps this single
+                 // shared definition safe for both xlAutoFree12 and the GridToXLOPER12
+                 // guard regardless of future producers.
+                 const DWORD baseType = elem->xltype & ~(xlbitDLLFree | xlbitXLFree);
+                 if (baseType == xltypeStr && (elem->xltype & xlbitDLLFree) && elem->val.str) {
                       delete[] elem->val.str;
                       elem->val.str = nullptr;
                  }
              }
              delete[] p->val.array.lparray;
+             p->val.array.lparray = nullptr;
          }
     }
     else if (p->xltype & xltypeRef) {
@@ -118,6 +127,14 @@ TYPES_EXCEL_CALLBACK xlAutoFree12(LPXLOPER12 p) {
             p->val.mref.lpmref = nullptr;
         }
     }
+}
+
+TYPES_EXCEL_CALLBACK xlAutoFree12(LPXLOPER12 p) {
+    if (!p) return;
+
+    // Check if the XLOPER12 itself is marked for DLL freeing
+    // (Usually this function is only called if xlbitDLLFree is set on p->xltype)
+    FreeDllOwnedContents(p);
 
     // Finally, release the XLOPER12 struct itself back to the pool
     xloperPool.Release(p);

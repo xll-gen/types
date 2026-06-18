@@ -399,6 +399,13 @@ LPXLOPER12 AnyToXLOPER12(const protocol::Any* any) {
                  op->val.array.lparray = nullptr;
 
                  // BUG-017: Guard must be declared before allocation to protect 'op'
+                 // NOTE (R28): stays array-only `delete[]` — does NOT call
+                 // FreeDllOwnedContents. This numeric grid is NOT memset after
+                 // new[] (it is filled in the loop below), so on a mid-fill throw
+                 // the unreached elements have indeterminate xltype; an element
+                 // free loop would read garbage. The elements are all xltypeNum
+                 // (no DLL-owned strings) anyway, so array-only is both correct
+                 // and sufficient here.
                  ScopeGuard guard([&]() {
                      if (op->val.array.lparray) delete[] op->val.array.lparray;
                      ReleaseXLOPER12(op);
@@ -516,16 +523,14 @@ LPXLOPER12 GridToXLOPER12(const protocol::Grid* grid) {
     // RAII guard to clean up if exception happens or return early.
     // Ownership contract: only element strings carrying xlbitDLLFree were
     // allocated by us — anything else is borrowed and must not be deleted.
+    // FreeDllOwnedContents (mem.cpp) is the single definition of this multi-array
+    // free logic, shared with xlAutoFree12 so the two can never drift. Its multi
+    // precondition (zero-init or fully-built elements) holds here: op->xltype is
+    // already xltypeMulti (above), and whenever the guard sees lparray != null the
+    // array has been memset (the new[]→memset pair below has no throw point between
+    // them, so a throwing new[] leaves lparray null and the helper skips the loop).
     ScopeGuard guard([&]() {
-        if (op->val.array.lparray) {
-            for(size_t i=0; i<count; ++i) {
-                 XLOPER12& elem = op->val.array.lparray[i];
-                 if ((elem.xltype & xlbitDLLFree) && BaseXlType(elem) == xltypeStr && elem.val.str) {
-                     delete[] elem.val.str;
-                 }
-            }
-            delete[] op->val.array.lparray;
-        }
+        FreeDllOwnedContents(op);
         ReleaseXLOPER12(op);
     });
 
