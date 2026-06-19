@@ -455,6 +455,17 @@ func (rcv *RtdConnectRequest) DeepCopy(b *flatbuffers.Builder) flatbuffers.UOffs
 	stringsOffsets := make([]flatbuffers.UOffsetT, l)
 	for i := 0; i < l; i++ {
 		str := rcv.Strings(i)
+		if str == nil {
+			// Fail closed on an inaccessible element. Strings is a vector of
+			// offsets; for a present vector (l>0) every element resolves to a
+			// non-nil byte slice — a legitimate empty string is a zero-length
+			// but non-nil slice. A nil here means the element offset pointed
+			// outside a truncated/corrupt buffer, so emit nothing rather than
+			// silently substituting an empty string. Consistent with the
+			// length guards above and Range.Refs element pre-validation
+			// (return 0).
+			return 0
+		}
 		stringsOffsets[i] = b.CreateByteString(str)
 	}
 
