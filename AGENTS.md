@@ -92,6 +92,7 @@ The `go/protocol/protocol.fbs` definition is the single source of truth for the 
 
 ### Excel Conversion Logic
 When adding support for a new type in `protocol.fbs`:
+> **Completeness guards (R29)**: appending a member to the `ScalarValue`/`AnyValue` unions trips a **loud failure** — the C++ `static_assert(…::MAX == …::Date)` before `AnyToXLOPER12`/`GridToXLOPER12`'s switches fails to compile, and `TestUnionDeepCopyCompleteness` (Go) fails on the changed member count. Both error messages list every union-tag ladder to update (`AnyToXLOPER12`, `GridToXLOPER12` per-cell, `ConvertScalar`/`ConvertAny`, and `deepcopy.go`'s two switches). Update all of them, then bump the asserts/count. These were added because the ladders fall through to Nil on an unknown tag — a missed ladder used to degrade silently. Do not delete the guards to "make it build"; update the ladders.
 1.  **Schema**: Update `go/protocol/protocol.fbs`.
 2.  **C++ Converters**: Update `src/converters.cpp` and `include/types/converters.h` to map the new FlatBuffer type to `XLOPER12`.
 3.  **Go Helpers**: Update `go/protocol/extensions.go` or validation logic if the new type requires specific handling on the Go side.
