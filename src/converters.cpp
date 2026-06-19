@@ -43,6 +43,39 @@ static LPXLOPER12 MakeErrXLOPER12(int err) {
     return op;
 }
 
+// Scalar siblings of MakeErrXLOPER12 (R32). Each is the same "alloc +
+// xltype|xlbitDLLFree + set value" block that AnyToXLOPER12 used to inline per
+// case. xlbitDLLFree is the load-bearing bit (Excel calls xlAutoFree12 back on
+// these); keeping it in one place per type means a future ownership fix lands
+// once. Multi (grid/numgrid) and ref (range) returns are NOT covered here —
+// they need extra array/ref setup and stay explicit at their sites.
+static LPXLOPER12 MakeNumXLOPER12(double v) {
+    LPXLOPER12 op = NewXLOPER12();
+    op->xltype = xltypeNum | xlbitDLLFree;
+    op->val.num = v;
+    return op;
+}
+
+static LPXLOPER12 MakeIntXLOPER12(int v) {
+    LPXLOPER12 op = NewXLOPER12();
+    op->xltype = xltypeInt | xlbitDLLFree;
+    op->val.w = v;
+    return op;
+}
+
+static LPXLOPER12 MakeBoolXLOPER12(bool v) {
+    LPXLOPER12 op = NewXLOPER12();
+    op->xltype = xltypeBool | xlbitDLLFree;
+    op->val.xbool = v;
+    return op;
+}
+
+static LPXLOPER12 MakeNilXLOPER12() {
+    LPXLOPER12 op = NewXLOPER12();
+    op->xltype = xltypeNil | xlbitDLLFree;
+    return op;
+}
+
 // Shared grid-dimension validation (R5 §4.7 dedup, BUG-015/017 history).
 // Rejects negative dimensions, a rows*cols product that would overflow
 // size_t (relevant on 32-bit x86 builds), and element counts above INT_MAX
@@ -55,6 +88,24 @@ static bool ValidateGridDims(int rows, int cols, size_t* outCount) {
     size_t count = (size_t)rows * (size_t)cols;
     if (count > (size_t)std::numeric_limits<int>::max()) return false;
     *outCount = count;
+    return true;
+}
+
+// ValidateGridDims plus the allocation-overflow guard that every grid->XLOPER12
+// / NumGrid->FP12 site had retyped (R31, BUG-015/017 lineage). The backing
+// store is headerBytes + count*elemSize bytes, and that total must not overflow
+// size_t — live on the 32-bit Excel target, where count can reach INT_MAX.
+// (NewFP12 reserves a 2*sizeof(int) header, so it passes headerBytes; the
+// XLOPER12 multi paths pass 0.) On any failure *outCount is 0 and it returns
+// false. Do not weaken any check. Payload-size validation (data()->size()
+// vs count) stays at the call site: it inspects the FlatBuffer, not the
+// allocation, and the comparators legitimately differ (>= vs ==).
+static bool ValidateGridAlloc(int rows, int cols, size_t elemSize, size_t headerBytes, size_t* outCount) {
+    if (!ValidateGridDims(rows, cols, outCount)) return false;
+    if (elemSize != 0 && *outCount > (SIZE_MAX - headerBytes) / elemSize) {
+        *outCount = 0;
+        return false;
+    }
     return true;
 }
 
@@ -129,12 +180,7 @@ flatbuffers::Offset<protocol::NumGrid> ConvertNumGrid(FP12* fp, flatbuffers::Fla
         int cols = fp->columns;
 
         size_t count = 0;
-        if (!ValidateGridDims(rows, cols, &count)) {
-            return protocol::CreateNumGrid(builder, 0, 0, 0);
-        }
-
-        // Safety check for vector allocation size (though FlatBuffers handles it, explicit check prevents huge alloc attempts)
-        if (count > SIZE_MAX / sizeof(double)) {
+        if (!ValidateGridAlloc(rows, cols, sizeof(double), 0, &count)) {
             return protocol::CreateNumGrid(builder, 0, 0, 0);
         }
 
@@ -333,45 +379,28 @@ flatbuffers::Offset<protocol::Any> ConvertAny(LPXLOPER12 op, flatbuffers::FlatBu
 LPXLOPER12 AnyToXLOPER12(const protocol::Any* any) {
     try {
         if (!any) {
-            LPXLOPER12 op = NewXLOPER12();
-            op->xltype = xltypeNil | xlbitDLLFree;
-            return op;
+            return MakeNilXLOPER12();
         }
 
         switch (any->val_type()) {
             case protocol::AnyValue::Num: {
-                LPXLOPER12 op = NewXLOPER12();
-                op->xltype = xltypeNum | xlbitDLLFree;
-                op->val.num = any->val_as_Num()->val();
-                return op;
+                return MakeNumXLOPER12(any->val_as_Num()->val());
             }
             case protocol::AnyValue::Date: {
-                LPXLOPER12 op = NewXLOPER12();
-                op->xltype = xltypeNum | xlbitDLLFree;
-                op->val.num = any->val_as_Date()->serial();
-                return op;
+                return MakeNumXLOPER12(any->val_as_Date()->serial());
             }
             case protocol::AnyValue::Int: {
-                LPXLOPER12 op = NewXLOPER12();
-                op->xltype = xltypeInt | xlbitDLLFree;
-                op->val.w = any->val_as_Int()->val();
-                return op;
+                return MakeIntXLOPER12(any->val_as_Int()->val());
             }
             case protocol::AnyValue::Bool: {
-                LPXLOPER12 op = NewXLOPER12();
-                op->xltype = xltypeBool | xlbitDLLFree;
-                op->val.xbool = any->val_as_Bool()->val();
-                return op;
+                return MakeBoolXLOPER12(any->val_as_Bool()->val());
             }
             case protocol::AnyValue::Str: {
                 std::wstring ws = StringToWString(any->val_as_Str()->val()->str());
                 return NewExcelString(ws);
             }
             case protocol::AnyValue::Err: {
-                 LPXLOPER12 op = NewXLOPER12();
-                 op->xltype = xltypeErr | xlbitDLLFree;
-                 op->val.err = ProtocolErrorToExcel(any->val_as_Err()->val());
-                 return op;
+                 return MakeErrXLOPER12(ProtocolErrorToExcel(any->val_as_Err()->val()));
             }
             case protocol::AnyValue::Grid: {
                  return GridToXLOPER12(any->val_as_Grid());
@@ -382,13 +411,8 @@ LPXLOPER12 AnyToXLOPER12(const protocol::Any* any) {
                  int cols = ng->cols();
 
                  size_t count = 0;
-                 if (!ValidateGridDims(rows, cols, &count) ||
+                 if (!ValidateGridAlloc(rows, cols, sizeof(XLOPER12), 0, &count) ||
                      !ng->data() || ng->data()->size() < count) {
-                     return MakeErrXLOPER12(xlerrValue);
-                 }
-
-                 // Check for allocation overflow (size_t)
-                 if (count > SIZE_MAX / sizeof(XLOPER12)) {
                      return MakeErrXLOPER12(xlerrValue);
                  }
 
@@ -439,9 +463,7 @@ LPXLOPER12 AnyToXLOPER12(const protocol::Any* any) {
             }
             case protocol::AnyValue::Nil:
             default: {
-                 LPXLOPER12 op = NewXLOPER12();
-                 op->xltype = xltypeNil | xlbitDLLFree;
-                 return op;
+                 return MakeNilXLOPER12();
             }
         }
     } catch (...) {
@@ -505,14 +527,9 @@ LPXLOPER12 GridToXLOPER12(const protocol::Grid* grid) {
     int cols = grid->cols();
 
     size_t count = 0;
-    if (!ValidateGridDims(rows, cols, &count) ||
+    if (!ValidateGridAlloc(rows, cols, sizeof(XLOPER12), 0, &count) ||
         !grid->data() || grid->data()->size() != count) {
         return MakeErrXLOPER12(xlerrValue);
-    }
-
-    // Check for allocation overflow (size_t)
-    if (count > SIZE_MAX / sizeof(XLOPER12)) {
-         return MakeErrXLOPER12(xlerrValue);
     }
 
     LPXLOPER12 op = NewXLOPER12();
@@ -654,16 +671,10 @@ FP12* NumGridToFP12(const protocol::NumGrid* grid) {
         int cols = grid->cols();
 
         size_t count = 0;
-        if (!ValidateGridDims(rows, cols, &count) ||
+        if (!ValidateGridAlloc(rows, cols, sizeof(double), 2*sizeof(int), &count) ||
             !grid->data() || grid->data()->size() != count) {
             // Return 0x0
             return NewFP12(0, 0);
-        }
-
-        // Check for allocation overflow (size_t) for FP12 (8 bytes per double)
-        // NewFP12 calculates size: 2*int + count*8.
-        if (count > (SIZE_MAX - 2*sizeof(int)) / sizeof(double)) {
-             return NewFP12(0, 0);
         }
 
         FP12* fp = NewFP12(rows, cols);
