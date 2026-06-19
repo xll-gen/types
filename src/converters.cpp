@@ -382,6 +382,18 @@ LPXLOPER12 AnyToXLOPER12(const protocol::Any* any) {
             return MakeNilXLOPER12();
         }
 
+        // Completeness guard (R29). This switch (and ConvertAny, plus the Go
+        // AnyValue switch in go/protocol/deepcopy.go) is keyed by the union tag
+        // and falls through to Nil on an unknown tag — so a newly-appended
+        // AnyValue member would SILENTLY degrade to a blank cell rather than
+        // fail. The assert below fires the moment a member is added (MAX moves).
+        // When it does: add a case here, in ConvertAny, and in deepcopy.go's
+        // AnyValue switch, then bump the expected MAX. Adding a member without
+        // touching the ladders must never compile clean.
+        static_assert(protocol::AnyValue::MAX == protocol::AnyValue::Date,
+                      "protocol::AnyValue changed: update AnyToXLOPER12, ConvertAny, "
+                      "and go/protocol/deepcopy.go (AnyValue switch), then bump this assert.");
+
         switch (any->val_type()) {
             case protocol::AnyValue::Num: {
                 return MakeNumXLOPER12(any->val_as_Num()->val());
@@ -554,6 +566,15 @@ LPXLOPER12 GridToXLOPER12(const protocol::Grid* grid) {
     try {
         op->val.array.lparray = new XLOPER12[count];
         std::memset(op->val.array.lparray, 0, count * sizeof(XLOPER12));
+
+        // Completeness guard (R29). Per-cell union-tag switch; an unknown tag
+        // leaves the cell xltypeNil (the default above) — a silent drop. This
+        // assert fires when a ScalarValue member is appended (MAX moves); when
+        // it does, add a case here, in ConvertScalar, and in deepcopy.go's
+        // ScalarValue switch, then bump the expected MAX.
+        static_assert(protocol::ScalarValue::MAX == protocol::ScalarValue::Date,
+                      "protocol::ScalarValue changed: update GridToXLOPER12's per-cell switch, "
+                      "ConvertScalar, and go/protocol/deepcopy.go (ScalarValue switch), then bump this assert.");
 
         for (size_t i = 0; i < count; ++i) {
             auto scalar = grid->data()->Get((flatbuffers::uoffset_t)i);
