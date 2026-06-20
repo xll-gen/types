@@ -3,6 +3,7 @@
 #include <windows.h>
 
 #include "types/xlcall.h"
+#include "types/pascalstr.h"
 #include <vector>
 #include <string>
 #include <cstring>
@@ -83,11 +84,14 @@ public:
                 m_op.xltype = xltypeMissing;
                 return;
             }
-            // Pascal string in op->val.str
+            // Pascal string in op->val.str. Re-encode through the single
+            // writer so a malformed prefix (claiming > 32767) is normalized:
+            // both the body AND the length prefix are clamped consistently.
+            // (The previous open-coded path clamped the body copy but copied
+            // the original — possibly oversized — prefix verbatim.)
             size_t len = (size_t)op->val.str[0];
-            if (len > 32767) len = 32767;
-            m_buffer.resize(len + 2); // +1 for length, +1 for safety
-            std::memcpy(m_buffer.data(), op->val.str, (len + 1) * sizeof(wchar_t));
+            m_buffer.resize(WritePascalWBufferLen(len));
+            WritePascalWString(m_buffer.data(), op->val.str + 1, len);
             m_op.xltype = xltypeStr;
             m_op.val.str = m_buffer.data();
         } else {
@@ -116,14 +120,8 @@ private:
             return;
         }
         size_t len = std::wcslen(str);
-        if (len > 32767) len = 32767; // Excel limit
-
-        m_buffer.resize(len + 2); // 1 for length char, 1 for null term
-        m_buffer[0] = (wchar_t)len;
-        if (len > 0) {
-            std::wmemcpy(m_buffer.data() + 1, str, len);
-        }
-        m_buffer[len + 1] = 0; // Null terminate
+        m_buffer.resize(WritePascalWBufferLen(len)); // len prefix + body + NUL
+        WritePascalWString(m_buffer.data(), str, len);
 
         m_op.xltype = xltypeStr;
         m_op.val.str = m_buffer.data();

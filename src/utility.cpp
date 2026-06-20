@@ -6,6 +6,7 @@
 #include <cstdio>
 #include <cstring>
 #include "types/mem.h" // For TempStr12/TempInt12 if needed (actually they use thread local)
+#include "types/pascalstr.h" // Single Excel Pascal wide-string writer
 
 // Limit strings to 10MB to prevent DoS
 static const size_t MAX_STRING_SIZE = 10 * 1024 * 1024;
@@ -116,11 +117,11 @@ void Utf8ToExcelString(const char* utf8, XCHAR*& outStr) {
     }
 
     if (needed > 0) {
-        // Successful conversion to stack buffer
-        outStr = new XCHAR[needed + 2];
-        std::memcpy(outStr + 1, stackBuf, needed * sizeof(XCHAR));
-        outStr[0] = (XCHAR)needed;
-        outStr[needed + 1] = 0;
+        // Successful conversion to stack buffer. `needed` < 256 here, so no
+        // clamp ever triggers, but route through the single writer for one
+        // consistent encoding. Caller owns outStr.
+        outStr = new XCHAR[WritePascalWBufferLen((size_t)needed)];
+        WritePascalWString(outStr, stackBuf, (size_t)needed);
     } else {
         // Fallback to double-call (or string too long for stack buffer)
         needed = MultiByteToWideChar(65001, 0, utf8, utf8Len, NULL, 0);
@@ -132,26 +133,16 @@ void Utf8ToExcelString(const char* utf8, XCHAR*& outStr) {
             outStr[0] = 0;
             outStr[1] = 0;
         } else {
-            if (needed > 32767) {
-                // Manual memory management for temp since we don't have ScopeGuard header here or want to keep it simple
-                // We use std::vector to avoid manual delete[]
-                std::vector<XCHAR> tempVec(needed + 2);
+            // Convert the full result into a temp body buffer, then let the
+            // single writer clamp to kMaxExcelStringLen and stamp prefix + NUL.
+            // (std::vector avoids manual delete[]; body lives at index 0.)
+            // Routing both the in-range and the > 32767 cases through the same
+            // writer keeps one clamp/encode definition. Caller owns outStr.
+            std::vector<XCHAR> tempVec((size_t)needed);
+            MultiByteToWideChar(65001, 0, utf8, utf8Len, tempVec.data(), needed);
 
-                MultiByteToWideChar(65001, 0, utf8, utf8Len, tempVec.data() + 1, needed);
-
-                outStr = new XCHAR[32767 + 2];
-                std::memcpy(outStr + 1, tempVec.data() + 1, 32767 * sizeof(XCHAR));
-
-                outStr[0] = 32767;
-                outStr[32767 + 1] = 0;
-            } else {
-                outStr = new XCHAR[needed + 2];
-                if (needed > 0) {
-                    MultiByteToWideChar(65001, 0, utf8, utf8Len, outStr + 1, needed);
-                }
-                outStr[0] = (XCHAR)needed;
-                outStr[needed + 1] = 0;
-            }
+            outStr = new XCHAR[WritePascalWBufferLen((size_t)needed)];
+            WritePascalWString(outStr, tempVec.data(), (size_t)needed);
         }
     }
 }

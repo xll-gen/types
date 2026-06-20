@@ -1,4 +1,5 @@
 #include "types/mem.h"
+#include "types/pascalstr.h"
 #include "types/ObjectPool.h"
 #include "types/ScopeGuard.h"
 #include <mutex>
@@ -29,12 +30,10 @@ LPXLOPER12 NewExcelString(const std::wstring& str) {
     });
 
     size_t len = str.length();
-    if (len > 32767) len = 32767;
-
-    wchar_t* buffer = new wchar_t[len + 2];
-    buffer[0] = (wchar_t)len;
-    if (len > 0) std::memcpy(buffer + 1, str.data(), len * sizeof(wchar_t));
-    buffer[len + 1] = 0; // Null terminate for safety, though not strictly required for Pascal string
+    // Caller owns `buffer` (freed by xlAutoFree12 via FreeDllOwnedContents);
+    // WritePascalWString only formats into it. Allocate clamped len + prefix + NUL.
+    wchar_t* buffer = new wchar_t[WritePascalWBufferLen(len)];
+    WritePascalWString(buffer, str.data(), len);
 
     p->val.str = buffer;
     guard.Dismiss();

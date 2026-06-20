@@ -38,6 +38,14 @@ target_link_libraries(utility_test PRIVATE xll-gen-types)
 target_include_directories(utility_test PRIVATE ${CMAKE_SOURCE_DIR}/include)
 add_test(NAME utility_test COMMAND utility_test)
 
+# R33: single Excel Pascal wide-string writer (WritePascalWString) + the five
+# call sites that delegate to it. Boundary matrix incl. 32767 exact / clamp /
+# embedded-NUL / surrogate-pair, with canary over/under-run guards.
+add_executable(pascalstr_test test_pascalstr.cpp)
+target_link_libraries(pascalstr_test PRIVATE xll-gen-types)
+target_include_directories(pascalstr_test PRIVATE ${CMAKE_SOURCE_DIR}/include)
+add_test(NAME pascalstr_test COMMAND pascalstr_test)
+
 # v0.2.6: comprehensive XLOPER12 <-> FlatBuffer round-trip suite. One test
 # case per converter (Scalar/Grid/NumGrid/Range/Any), exercising NaN/Inf,
 # INT_MIN/MAX, empty grids and non-ASCII UTF-16 strings. Closes the last
