@@ -3,6 +3,30 @@
 All notable changes to `xll-gen/types` are documented here. (File introduced
 at v0.2.9 — for earlier releases see the git tag history.)
 
+## [v0.2.14] - 2026-06-22
+
+### Changed
+
+- **Pascal wide-string encoding unified (R33).** The XLOPER12 `xltypeStr` layout
+  ("clamp to 32767, `[0]`=len, copy body, NUL-terminate") that was hand-rolled in
+  five sites (`ScopedXLOPER12::SetString`, the `const XLOPER12*` ctor,
+  `NewExcelString`, and `Utf8ToExcelString`'s stack + heap paths) now flows
+  through one header-only writer, `WritePascalWString` (+ `WritePascalWBufferLen`
+  for sizing, sharing a single `ClampExcelStringLen`). One intentional
+  normalization: the `const XLOPER12*` ctor used to copy a source length prefix
+  verbatim, so a malformed prefix claiming e.g. 40000 produced a buffer
+  advertising 40000 over a 32767-char body; it now stamps the clamped length.
+  Well-formed input is byte-identical. XLOPER12 ABI unchanged.
+- Internal converter/clone refactors (R28–R32): unified XLOPER12 free-contents
+  logic, `Clone()` boilerplate collapsed via a generic `cloneTable`, grid
+  alloc-overflow guard + scalar XLOPER12 makers consolidated, and union
+  completeness guards added for `ScalarValue`/`AnyValue`.
+
+### Fixed
+
+- `deepcopy`: fail closed on an inaccessible `RtdConnectRequest.Strings` element
+  instead of silently proceeding.
+
 ## [v0.2.12] - 2026-06-13
 
 ### Changed
