@@ -73,6 +73,8 @@ This project uses [Task](https://taskfile.dev/) for build automation.
 
 *   **CommandWrapper**: The `CommandWrapper` table is used in `protocol.fbs` because FlatBuffers Go bindings do not currently support vectors of Unions (e.g., `[Command]`). The wrapper allows us to use `[CommandWrapper]` instead.
 
+*   **`xltype` bit flags are the source of truth for "is this guard redundant?" (over-defensive-logic audit, 2026-06-25).** `types` (via `xlcall.h`) pins `xltypeRef = 0x0008` and `xltypeSRef = 0x0400` as **distinct, non-overlapping bits**. A 2026-06-25 cross-repo audit confirmed a downstream consumer guard (`CacheManager::GetOrComputeRefHash` in `xll-gen`) is **not** redundant precisely because of this: its caller admits `xltypeRef | xltypeSRef`, but the callee narrows to `xltypeRef`, so an SRef-only input passes the caller yet is correctly filtered by the callee — real filtering, not a duplicate check. **General rule for any consumer of these types:** a callee guard is redundant only when the caller's admission predicate *logically implies* it. With distinct bit flags, a narrower callee mask is load-bearing — do not "simplify" it away by reasoning only from the call graph.
+
 ## Documentation Standards
 
 *   **Timestamps**: When creating or updating documentation in the `.jules/` directory (e.g., bug tracker, sentinel logs), always fetch the current date (e.g., via `date` command) and use it to timestamp your entries. This ensures accurate tracking of when issues or changes were recorded.
